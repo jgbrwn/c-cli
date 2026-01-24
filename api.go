@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const baseURL = "https://yts.mx/api/v2"
+const baseURL = "https://yts.bz/api/v2"
 
 type Movie struct {
 	ID          int      `json:"id"`

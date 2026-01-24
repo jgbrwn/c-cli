@@ -218,11 +218,11 @@ func (m Model) viewHelp() string {
 
 	switch m.state {
 	case viewSearch:
-		help = "enter: search • q: quit"
+		help = "enter: search • ctrl+c: quit"
 	case viewLoading:
 		help = "loading..."
 	case viewResults:
-		help = "↑/↓: navigate • enter: select • esc: back • q: back"
+		help = "↑/↓: navigate • enter: select • esc: back"
 	case viewDetails:
 		help = "tab: select torrent • m: magnet • t: torrent • a: auto-select best • esc: back"
 	case viewTorrents:

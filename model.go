@@ -200,13 +200,18 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Non-search mode key handling
 	switch msg.String() {
-	case "ctrl+c", "q":
-		if m.state == viewLoading {
-			return m, tea.Quit
-		}
-		return m.goBack(), nil
+	case "ctrl+c":
+		return m, tea.Quit
 
 	case "esc":
+		if m.state == viewResults {
+			// From results, go back to search
+			m.state = viewSearch
+			m.movies = nil
+			m.err = nil
+			m.message = ""
+			return m, nil
+		}
 		return m.goBack(), nil
 
 	case "enter":

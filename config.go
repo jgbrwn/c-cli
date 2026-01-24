@@ -8,8 +8,9 @@ import (
 )
 
 type Config struct {
-	SearchLimit int    `toml:"search_limit"`
-	DownloadDir string `toml:"download_dir"`
+	SearchLimit  int    `toml:"search_limit"`
+	DownloadDir  string `toml:"download_dir"`
+	OMDBAPIKey   string `toml:"omdb_api_key"`
 }
 
 var config Config
@@ -19,8 +20,9 @@ func LoadConfig() Config {
 	pwd, _ := os.Getwd()
 
 	cfg := Config{
-		SearchLimit: 20,
+		SearchLimit: 50,
 		DownloadDir: pwd,
+		OMDBAPIKey:  os.Getenv("OMDB_API_KEY"),
 	}
 
 	home, err := os.UserHomeDir()

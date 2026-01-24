@@ -57,11 +57,11 @@ func (m Model) viewResults() string {
 	b.WriteString(headerStyle.Render("🎬 Search Results") + "\n\n")
 
 	// Table header
-	headerRow := fmt.Sprintf("  %-6s %-40s %-6s %s",
-		dimStyle.Render("ID"),
+	headerRow := fmt.Sprintf("  %-40s %-6s %-8s %s",
 		dimStyle.Render("Title"),
 		dimStyle.Render("Year"),
 		dimStyle.Render("Rating"),
+		dimStyle.Render("Votes"),
 	)
 	b.WriteString(headerRow + "\n")
 	b.WriteString(dimStyle.Render(strings.Repeat("─", 70)) + "\n")
@@ -72,13 +72,27 @@ func (m Model) viewResults() string {
 			title = title[:35] + "..."
 		}
 
-		rating := ratingStyle.Render(fmt.Sprintf("⭐ %.1f", movie.Rating))
+		// Use OMDB rating if available, otherwise YTS
+		rating := ""
+		if movie.OMDB != nil && movie.OMDB.IMDBRating != "" && movie.OMDB.IMDBRating != "N/A" {
+			rating = ratingStyle.Render(fmt.Sprintf("⭐ %s", movie.OMDB.IMDBRating))
+		} else if movie.Rating > 0 {
+			rating = ratingStyle.Render(fmt.Sprintf("⭐ %.1f", movie.Rating))
+		} else {
+			rating = dimStyle.Render("  -  ")
+		}
 
-		row := fmt.Sprintf("%-6d %-40s %-6d %s",
-			movie.ID,
+		// Show vote count if available
+		votes := ""
+		if movie.OMDB != nil && movie.OMDB.IMDBVotes != "" && movie.OMDB.IMDBVotes != "N/A" {
+			votes = dimStyle.Render(movie.OMDB.IMDBVotes)
+		}
+
+		row := fmt.Sprintf("%-40s %-6d %-8s %s",
 			title,
 			movie.Year,
 			rating,
+			votes,
 		)
 
 		if i == m.selected {
@@ -97,39 +111,74 @@ func (m Model) viewMovieDetails() string {
 	}
 
 	var b strings.Builder
+	omdb := m.movie.OMDB
 
-	// Movie info panel
-	description := m.movie.Summary
-	if description == "" {
+	// Get best available data (prefer OMDB)
+	description := ""
+	if omdb != nil && omdb.Plot != "" && omdb.Plot != "N/A" {
+		description = omdb.Plot
+	} else if m.movie.Summary != "" {
+		description = m.movie.Summary
+	} else if m.movie.Description != "" {
 		description = m.movie.Description
-	}
-	if description == "" {
+	} else {
 		description = "No description available."
 	}
-	if len(description) > 300 {
-		description = description[:297] + "..."
+	if len(description) > 400 {
+		description = description[:397] + "..."
 	}
 
-	genres := "N/A"
-	if len(m.movie.Genres) > 0 {
+	genres := ""
+	if omdb != nil && omdb.Genre != "" && omdb.Genre != "N/A" {
+		genres = omdb.Genre
+	} else if len(m.movie.Genres) > 0 {
 		genres = strings.Join(m.movie.Genres, ", ")
 	}
 
-	detailsContent := fmt.Sprintf(
-		"%s (%d)\n\n"+
-			"⭐ Rating: %.1f\n"+
-			"⏱ Runtime: %d min\n"+
-			"🎭 Genres: %s\n\n"+
-			"%s",
-		lipgloss.NewStyle().Bold(true).Render(m.movie.Title),
-		m.movie.Year,
-		m.movie.Rating,
-		m.movie.Runtime,
-		genres,
-		description,
-	)
+	rating := ""
+	if omdb != nil && omdb.IMDBRating != "" && omdb.IMDBRating != "N/A" {
+		rating = omdb.IMDBRating
+	} else if m.movie.Rating > 0 {
+		rating = fmt.Sprintf("%.1f", m.movie.Rating)
+	}
 
-	detailsBox := boxStyle.Render(detailsContent)
+	runtime := ""
+	if omdb != nil && omdb.Runtime != "" && omdb.Runtime != "N/A" {
+		runtime = omdb.Runtime
+	} else if m.movie.Runtime > 0 {
+		runtime = fmt.Sprintf("%d min", m.movie.Runtime)
+	}
+
+	// Build details content
+	var details strings.Builder
+	details.WriteString(lipgloss.NewStyle().Bold(true).Render(m.movie.Title))
+	details.WriteString(fmt.Sprintf(" (%d)\n\n", m.movie.Year))
+
+	if rating != "" {
+		details.WriteString(fmt.Sprintf("⭐ Rating: %s", rating))
+		if omdb != nil && omdb.IMDBVotes != "" && omdb.IMDBVotes != "N/A" {
+			details.WriteString(fmt.Sprintf(" (%s votes)", omdb.IMDBVotes))
+		}
+		details.WriteString("\n")
+	}
+	if runtime != "" {
+		details.WriteString(fmt.Sprintf("⏱ Runtime: %s\n", runtime))
+	}
+	if omdb != nil && omdb.Rated != "" && omdb.Rated != "N/A" {
+		details.WriteString(fmt.Sprintf("🎫 Rated: %s\n", omdb.Rated))
+	}
+	if genres != "" {
+		details.WriteString(fmt.Sprintf("🎭 Genres: %s\n", genres))
+	}
+	if omdb != nil && omdb.Director != "" && omdb.Director != "N/A" {
+		details.WriteString(fmt.Sprintf("🎬 Director: %s\n", omdb.Director))
+	}
+	if omdb != nil && omdb.Actors != "" && omdb.Actors != "N/A" {
+		details.WriteString(fmt.Sprintf("🎭 Cast: %s\n", omdb.Actors))
+	}
+	details.WriteString(fmt.Sprintf("\n%s", description))
+
+	detailsBox := boxStyle.Render(details.String())
 	b.WriteString(headerStyle.Render("🎬 Movie Details") + "\n")
 	b.WriteString(detailsBox + "\n\n")
 

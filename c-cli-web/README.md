@@ -39,6 +39,11 @@ All configuration is via environment variables:
 | `DOWNLOAD_DIR` | `$HOME` | Directory for server-side torrent downloads |
 | `OMDB_API_KEY` | _(none)_ | OMDB API key for IMDB metadata ([get one free](https://www.omdbapi.com/apikey.aspx)) |
 
+With OMDB enabled:
+- Search results sorted by IMDB popularity (vote count)
+- Returns up to 50 results (default)
+- Full movie details: rating, runtime, director, cast, plot
+
 ### Example
 
 ```bash

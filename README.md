@@ -23,6 +23,11 @@ Terminal-based interface built with [Bubble Tea](https://github.com/charmbracele
 
 ```bash
 go build -o c-cli .
+
+# With OMDB API key (recommended - enables ratings, cast, plot, sorted by popularity)
+OMDB_API_KEY=your_key ./c-cli
+
+# Without OMDB (basic mode)
 ./c-cli
 ```
 
@@ -55,9 +60,15 @@ go build -o c-cli .
 Create `~/.config/c-cli/config.toml`:
 
 ```toml
-search_limit = 20
+search_limit = 50
 download_dir = "~/Downloads"
+omdb_api_key = "your_key_here"  # Optional, or use OMDB_API_KEY env var
 ```
+
+With OMDB enabled:
+- Search results sorted by IMDB popularity (vote count)
+- Full movie details: rating, runtime, director, cast, plot
+- IMDB ratings instead of YTS ratings
 
 ---
 
@@ -112,7 +123,7 @@ See [c-cli-web/README.md](./c-cli-web/README.md) for full documentation.
 - **Bubble Tea** - TUI framework
 - **Lip Gloss** - TUI styling  
 - **YTS API** - Movie/torrent data
-- **OMDB API** - IMDB metadata (optional, web version)
+- **OMDB API** - IMDB metadata (optional, both versions)
 
 ## 📄 License
 

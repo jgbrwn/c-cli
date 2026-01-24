@@ -10,8 +10,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -154,6 +156,46 @@ func fetchOMDBInfo(imdbID string) (*OMDBMovie, error) {
 	return &movie, nil
 }
 
+func enrichAndSortMovies(movies []Movie) []Movie {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// Fetch OMDB data concurrently
+	for i := range movies {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			if movies[idx].IMDBCode != "" {
+				if omdb, err := fetchOMDBInfo(movies[idx].IMDBCode); err == nil && omdb != nil {
+					mu.Lock()
+					movies[idx].OMDB = omdb
+					mu.Unlock()
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Sort by IMDB votes (descending)
+	sort.Slice(movies, func(i, j int) bool {
+		votesI := parseVotes(movies[i].OMDB)
+		votesJ := parseVotes(movies[j].OMDB)
+		return votesI > votesJ
+	})
+
+	return movies
+}
+
+func parseVotes(omdb *OMDBMovie) int {
+	if omdb == nil || omdb.IMDBVotes == "" || omdb.IMDBVotes == "N/A" {
+		return 0
+	}
+	// Remove commas from vote count (e.g., "1,234,567" -> "1234567")
+	voteStr := strings.ReplaceAll(omdb.IMDBVotes, ",", "")
+	votes, _ := strconv.Atoi(voteStr)
+	return votes
+}
+
 func handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -161,7 +203,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := 20
+	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 50 {
 			limit = n
@@ -189,6 +231,12 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	if movies == nil {
 		movies = []Movie{}
 	}
+
+	// If OMDB is configured, fetch vote counts and sort by popularity
+	if omdbAPIKey != "" && len(movies) > 0 {
+		movies = enrichAndSortMovies(movies)
+	}
+
 	jsonResponse(w, movies)
 }
 

@@ -22,7 +22,7 @@ func (m Model) View() string {
 		b.WriteString(m.viewLoading())
 	case viewResults:
 		b.WriteString(m.viewResults())
-	case viewDetails, viewTorrents, viewAction:
+	case viewDetails, viewTorrents:
 		b.WriteString(m.viewMovieDetails())
 	}
 
@@ -136,9 +136,10 @@ func (m Model) viewMovieDetails() string {
 	// Torrents table
 	b.WriteString(m.viewTorrentsTable())
 
-	// Action selection
-	if m.state == viewAction {
-		b.WriteString("\n" + m.viewActionSelect())
+	// Show magnet link if available
+	if m.magnetLink != "" {
+		b.WriteString("\n" + headerStyle.Render("🧲 Magnet Link:") + "\n")
+		b.WriteString(dimStyle.Render(m.magnetLink) + "\n")
 	}
 
 	return b.String()
@@ -196,22 +197,6 @@ func (m Model) viewTorrentsTable() string {
 	return b.String()
 }
 
-func (m Model) viewActionSelect() string {
-	var b strings.Builder
-	b.WriteString(headerStyle.Render("🎯 Choose Action:") + "\n\n")
-
-	actions := []string{"🧲 Open Magnet Link", "⬇  Download .torrent File"}
-
-	for i, action := range actions {
-		if i == m.actionIdx {
-			b.WriteString(selectedStyle.Render("▶ "+action) + "\n")
-		} else {
-			b.WriteString(normalStyle.Render("  "+action) + "\n")
-		}
-	}
-
-	return b.String()
-}
 
 func (m Model) viewHelp() string {
 	var help string
@@ -223,12 +208,8 @@ func (m Model) viewHelp() string {
 		help = "loading..."
 	case viewResults:
 		help = "↑/↓: navigate • enter: select • esc: back"
-	case viewDetails:
-		help = "↑/↓/0-9: select torrent • enter: choose action • m: magnet • t: torrent • a: auto-best • esc: back"
-	case viewTorrents:
-		help = "↑/↓: navigate • enter/tab: choose action • m: magnet • t: torrent • a: auto-select"
-	case viewAction:
-		help = "↑/↓: navigate • enter: confirm • tab: back to details"
+	case viewDetails, viewTorrents:
+		help = "↑/↓/0-9: select torrent • enter/m: show magnet • t: download .torrent • a: auto-best • esc: back"
 	}
 
 	return dimStyle.Render(help)

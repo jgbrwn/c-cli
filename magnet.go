@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
-	"os/exec"
-	"runtime"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -27,21 +29,50 @@ func BuildMagnet(hash, name string) string {
 		hash, url.QueryEscape(name), trackerParams.String())
 }
 
-func OpenURL(url string) error {
-	var cmd *exec.Cmd
+func DownloadTorrentFile(torrentURL, movieTitle, quality string) (string, error) {
+	resp, err := http.Get(torrentURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
 
-	switch runtime.GOOS {
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		return fmt.Errorf("unsupported platform")
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download failed with status: %d", resp.StatusCode)
 	}
 
-	return cmd.Start()
+	// Sanitize filename
+	safeTitle := sanitizeFilename(movieTitle)
+	filename := fmt.Sprintf("%s.%s.torrent", safeTitle, quality)
+	filepath := filepath.Join(config.DownloadDir, filename)
+
+	out, err := os.Create(filepath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create file: %w", err)
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return filepath, nil
+}
+
+func sanitizeFilename(name string) string {
+	// Replace characters that are problematic in filenames
+	replacer := strings.NewReplacer(
+		"/", "-",
+		"\\", "-",
+		":", "-",
+		"*", "-",
+		"?", "-",
+		"\"", "-",
+		"<", "-",
+		">", "-",
+		"|", "-",
+	)
+	return replacer.Replace(name)
 }
 
 func SelectBestTorrent(torrents []Torrent) *Torrent {

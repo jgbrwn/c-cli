@@ -19,7 +19,6 @@ const (
 	viewResults
 	viewDetails
 	viewTorrents
-	viewAction
 )
 
 // Styles
@@ -76,6 +75,11 @@ type actionCompleteMsg struct {
 	err     error
 }
 
+type torrentDownloadedMsg struct {
+	filepath string
+	err      error
+}
+
 // Model
 type Model struct {
 	state       viewState
@@ -86,9 +90,9 @@ type Model struct {
 	movie       *Movie
 	torrents    []Torrent
 	torrentIdx  int
-	actionIdx   int
 	err         error
 	message     string
+	magnetLink  string
 	width       int
 	height      int
 }
@@ -168,7 +172,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.message = msg.message
 		}
-		m.state = viewDetails
+		return m, nil
+
+	case torrentDownloadedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.message = fmt.Sprintf("⬇ Downloaded: %s", msg.filepath)
+		}
 		return m, nil
 	}
 
@@ -227,9 +238,6 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.state == viewDetails {
 			m.state = viewTorrents
 		} else if m.state == viewTorrents {
-			m.state = viewAction
-			m.actionIdx = 0
-		} else if m.state == viewAction {
 			m.state = viewDetails
 		}
 		return m, nil
@@ -249,16 +257,19 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "m":
-		// Open magnet directly
-		if (m.state == viewTorrents || m.state == viewDetails || m.state == viewAction) && len(m.torrents) > 0 {
-			return m, m.openMagnet()
+		// Show magnet link
+		if (m.state == viewTorrents || m.state == viewDetails) && len(m.torrents) > 0 {
+			torrent := m.torrents[m.torrentIdx]
+			m.magnetLink = BuildMagnet(torrent.Hash, fmt.Sprintf("%s %s", m.movie.Title, torrent.Quality))
+			m.message = ""
+			m.err = nil
 		}
 		return m, nil
 
 	case "t":
-		// Open torrent file directly
-		if (m.state == viewTorrents || m.state == viewDetails || m.state == viewAction) && len(m.torrents) > 0 {
-			return m, m.openTorrent()
+		// Download torrent file
+		if (m.state == viewTorrents || m.state == viewDetails) && len(m.torrents) > 0 {
+			return m, m.downloadTorrent()
 		}
 		return m, nil
 
@@ -283,11 +294,12 @@ func (m Model) goBack() Model {
 		m.movies = nil
 		m.err = nil
 		m.message = ""
-	case viewDetails, viewTorrents, viewAction:
+	case viewDetails, viewTorrents:
 		m.state = viewResults
 		m.movie = nil
 		m.err = nil
 		m.message = ""
+		m.magnetLink = ""
 	case viewSearch:
 		// Already at root
 	}
@@ -304,10 +316,6 @@ func (m Model) handleUp() Model {
 		if m.torrentIdx > 0 {
 			m.torrentIdx--
 		}
-	case viewAction:
-		if m.actionIdx > 0 {
-			m.actionIdx--
-		}
 	}
 	return m
 }
@@ -321,10 +329,6 @@ func (m Model) handleDown() Model {
 	case viewDetails, viewTorrents:
 		if m.torrentIdx < len(m.torrents)-1 {
 			m.torrentIdx++
-		}
-	case viewAction:
-		if m.actionIdx < 1 {
-			m.actionIdx++
 		}
 	}
 	return m
@@ -349,16 +353,14 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spinner.Tick, m.fetchMovieDetails(m.movies[m.selected].ID))
 
 	case viewDetails, viewTorrents:
-		m.state = viewAction
-		m.actionIdx = 0
-		return m, nil
-
-	case viewAction:
-		if m.actionIdx == 0 {
-			return m, m.openMagnet()
-		} else {
-			return m, m.openTorrent()
+		// Show magnet link for selected torrent
+		if len(m.torrents) > 0 {
+			torrent := m.torrents[m.torrentIdx]
+			m.magnetLink = BuildMagnet(torrent.Hash, fmt.Sprintf("%s %s", m.movie.Title, torrent.Quality))
+			m.message = ""
+			m.err = nil
 		}
+		return m, nil
 	}
 
 	return m, nil
@@ -378,31 +380,16 @@ func (m Model) fetchMovieDetails(id int) tea.Cmd {
 	}
 }
 
-func (m Model) openMagnet() tea.Cmd {
+func (m Model) downloadTorrent() tea.Cmd {
 	return func() tea.Msg {
 		if len(m.torrents) == 0 {
-			return actionCompleteMsg{err: fmt.Errorf("no torrents available")}
+			return torrentDownloadedMsg{err: fmt.Errorf("no torrents available")}
 		}
 		torrent := m.torrents[m.torrentIdx]
-		magnet := BuildMagnet(torrent.Hash, fmt.Sprintf("%s %s", m.movie.Title, torrent.Quality))
-		err := OpenURL(magnet)
+		filepath, err := DownloadTorrentFile(torrent.URL, m.movie.Title, torrent.Quality)
 		if err != nil {
-			return actionCompleteMsg{err: err}
+			return torrentDownloadedMsg{err: err}
 		}
-		return actionCompleteMsg{message: "🧲 Magnet link opened in your torrent client!"}
-	}
-}
-
-func (m Model) openTorrent() tea.Cmd {
-	return func() tea.Msg {
-		if len(m.torrents) == 0 {
-			return actionCompleteMsg{err: fmt.Errorf("no torrents available")}
-		}
-		torrent := m.torrents[m.torrentIdx]
-		err := OpenURL(torrent.URL)
-		if err != nil {
-			return actionCompleteMsg{err: err}
-		}
-		return actionCompleteMsg{message: "⬇ Torrent file download started in browser!"}
+		return torrentDownloadedMsg{filepath: filepath}
 	}
 }

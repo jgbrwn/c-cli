@@ -224,7 +224,7 @@ func (m Model) viewHelp() string {
 	case viewResults:
 		help = "↑/↓: navigate • enter: select • esc: back"
 	case viewDetails:
-		help = "tab: select torrent • m: magnet • t: torrent • a: auto-select best • esc: back"
+		help = "↑/↓/0-9: select torrent • enter: choose action • m: magnet • t: torrent • a: auto-best • esc: back"
 	case viewTorrents:
 		help = "↑/↓: navigate • enter/tab: choose action • m: magnet • t: torrent • a: auto-select"
 	case viewAction:

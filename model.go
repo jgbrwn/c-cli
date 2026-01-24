@@ -261,6 +261,16 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.openTorrent()
 		}
 		return m, nil
+
+	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		// Number keys to select torrent directly
+		if m.state == viewDetails || m.state == viewTorrents {
+			idx := int(msg.String()[0] - '0')
+			if idx < len(m.torrents) {
+				m.torrentIdx = idx
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -290,7 +300,7 @@ func (m Model) handleUp() Model {
 		if m.selected > 0 {
 			m.selected--
 		}
-	case viewTorrents:
+	case viewDetails, viewTorrents:
 		if m.torrentIdx > 0 {
 			m.torrentIdx--
 		}
@@ -308,7 +318,7 @@ func (m Model) handleDown() Model {
 		if m.selected < len(m.movies)-1 {
 			m.selected++
 		}
-	case viewTorrents:
+	case viewDetails, viewTorrents:
 		if m.torrentIdx < len(m.torrents)-1 {
 			m.torrentIdx++
 		}
@@ -338,7 +348,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		m.state = viewLoading
 		return m, tea.Batch(m.spinner.Tick, m.fetchMovieDetails(m.movies[m.selected].ID))
 
-	case viewTorrents:
+	case viewDetails, viewTorrents:
 		m.state = viewAction
 		m.actionIdx = 0
 		return m, nil

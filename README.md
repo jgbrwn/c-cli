@@ -2,7 +2,7 @@
 
 A Go application for browsing and downloading movies from YTS. Available as both a **terminal UI (TUI)** and a **web app**.
 
-Inspired by [cinecli](https://github.com/eyeblech/cinecli).
+Inspired by [cinecli](https://github.com/eyeblech/cinecli) by [@eyeblech](https://github.com/eyeblech).
 
 ## ✨ Features
 
@@ -114,4 +114,4 @@ See [c-cli-web/README.md](./c-cli-web/README.md) for full documentation.
 
 ## 📄 License
 
-MIT
+Apache License 2.0 - see [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for details.

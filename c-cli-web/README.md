@@ -63,4 +63,4 @@ PORT=3000 DOWNLOAD_DIR=/data/torrents OMDB_API_KEY=abc123 ./c-cli-web
 
 ## 📄 License
 
-MIT
+Apache License 2.0 - see [LICENSE](../LICENSE) and [NOTICE](../NOTICE) for details.

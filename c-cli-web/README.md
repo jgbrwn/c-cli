@@ -2,6 +2,8 @@
 
 A web interface for browsing and downloading movies from YTS, with IMDB metadata enrichment.
 
+![Screenshot](screenshot.png)
+
 ## ✨ Features
 
 - 🔍 Search movies from YTS

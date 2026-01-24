@@ -65,6 +65,8 @@ download_dir = "~/Downloads"
 
 Web-based interface with OMDB/IMDB integration for rich movie metadata.
 
+![Screenshot](screenshot.png)
+
 ### Build & Run
 
 ```bash

@@ -2,12 +2,12 @@
 
 A Go application for browsing and downloading movies from YTS. Available as both a **terminal UI (TUI)** and a **web app**.
 
-This is a Go rewrite of [cinecli](https://github.com/eyeblech/cinecli), built with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
+Inspired by [cinecli](https://github.com/eyeblech/cinecli).
 
 ## ✨ Features
 
 - 🔍 Search movies from YTS
-- 🎥 View detailed movie information (enhanced with OMDB/IMDB data)
+- 🎥 View detailed movie information
 - 🧲 Generate magnet links
 - 📦 Download `.torrent` files
 - ⚡ Auto-select best torrent (highest quality + healthy seeds)
@@ -15,7 +15,9 @@ This is a Go rewrite of [cinecli](https://github.com/eyeblech/cinecli), built wi
 
 ---
 
-## TUI Version
+## 💻 TUI Version
+
+Terminal-based interface built with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
 ### Build & Run
 
@@ -24,18 +26,28 @@ go build -o c-cli .
 ./c-cli
 ```
 
-### Navigation
+### Screenshot
+
+```
+🎬 CineCLI - Movie Browser
+
+🔍 Search for movies:
+
+> inception
+```
+
+### Keyboard Controls
 
 | Key | Action |
 |-----|--------|
 | `↑`/`↓` or `j`/`k` | Navigate lists |
-| `Enter` | Select/Confirm |
+| `Enter` | Select / Show magnet link |
 | `0-9` | Select torrent by index |
-| `Tab` | Switch between sections |
+| `Tab` | Switch sections |
 | `Esc` | Go back |
 | `a` | Auto-select best torrent |
 | `m` | Show magnet link |
-| `t` | Download torrent file |
+| `t` | Download `.torrent` file |
 | `Ctrl+C` | Quit |
 
 ### Configuration
@@ -49,26 +61,44 @@ download_dir = "~/Downloads"
 
 ---
 
-## Web Version
+## 🌐 Web Version
 
-See [`c-cli-web/`](./c-cli-web/) for a web-based interface with the same functionality.
+Web-based interface with OMDB/IMDB integration for rich movie metadata.
 
-### Quick Start
+### Build & Run
 
 ```bash
 cd c-cli-web
 go build -o c-cli-web .
+
+# With OMDB API key (recommended - enables posters, ratings, cast, plot)
 OMDB_API_KEY=your_key ./c-cli-web
+
+# Without OMDB (basic mode)
+./c-cli-web
 ```
 
 Then open http://localhost:8000
 
 ### Features
 
-- Movie posters and full IMDB metadata (via OMDB API)
-- Download torrents to server or to your browser
-- Click poster to open IMDB page
-- Responsive dark theme UI
+- 🎬 Movie posters in search results and details
+- ⭐ IMDB ratings, runtime, genres, director, cast
+- 📝 Full plot descriptions
+- 🧲 Magnet links with copy to clipboard
+- ⬇ Download `.torrent` to server
+- 💾 Download `.torrent` to your browser
+- 🔗 Click poster to open IMDB page
+- 🌙 Dark theme UI
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8000` | Server port |
+| `HOST` | `127.0.0.1` | Bind address |
+| `DOWNLOAD_DIR` | `$HOME` | Server download directory |
+| `OMDB_API_KEY` | _(none)_ | [Get free key](https://www.omdbapi.com/apikey.aspx) |
 
 See [c-cli-web/README.md](./c-cli-web/README.md) for full documentation.
 
@@ -78,9 +108,9 @@ See [c-cli-web/README.md](./c-cli-web/README.md) for full documentation.
 
 - **Go** - Programming language
 - **Bubble Tea** - TUI framework
-- **Lip Gloss** - TUI styling
+- **Lip Gloss** - TUI styling  
 - **YTS API** - Movie/torrent data
-- **OMDB API** - IMDB metadata (optional)
+- **OMDB API** - IMDB metadata (optional, web version)
 
 ## 📄 License
 

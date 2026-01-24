@@ -1,41 +1,66 @@
 # 🎬 CineCLI Web
 
-A web interface for browsing and downloading movies from YTS.
+A web interface for browsing and downloading movies from YTS, with IMDB metadata enrichment.
 
-## Features
+## ✨ Features
 
 - 🔍 Search movies from YTS
-- 🎥 View movie details and available torrents
+- 🎥 View movie details with posters, ratings, cast, and plot (via OMDB/IMDB)
 - 🧲 Generate magnet links (with copy to clipboard)
-- ⬇ Download .torrent files to server
+- ⬇ Download `.torrent` files to server
+- 💾 Download `.torrent` files to your browser/computer
+- 🎬 Click poster to open IMDB page
 
-## Usage
+## 🚀 Usage
 
 ```bash
 # Build
 go build -o c-cli-web .
 
-# Run (default port 8000, downloads to current directory)
-./c-cli-web
+# Run with OMDB API key (recommended)
+OMDB_API_KEY=your_key ./c-cli-web
 
-# Custom port and download directory
-PORT=3000 DOWNLOAD_DIR=/path/to/downloads ./c-cli-web
+# Run without OMDB (basic mode)
+./c-cli-web
 ```
 
-Then open http://localhost:8000 in your browser.
+Then open http://localhost:8000
 
-## API Endpoints
+## ⚙️ Configuration
+
+All configuration is via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8000` | Server port |
+| `HOST` | `127.0.0.1` | Bind address (use `0.0.0.0` for all interfaces) |
+| `DOWNLOAD_DIR` | `$HOME` | Directory for server-side torrent downloads |
+| `OMDB_API_KEY` | _(none)_ | OMDB API key for IMDB metadata ([get one free](https://www.omdbapi.com/apikey.aspx)) |
+
+### Example
+
+```bash
+PORT=3000 DOWNLOAD_DIR=/data/torrents OMDB_API_KEY=abc123 ./c-cli-web
+```
+
+## 📡 API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Web UI |
 | `GET /api/search?q=<query>` | Search movies |
-| `GET /api/movie/<id>` | Get movie details |
+| `GET /api/movie/<id>` | Get movie details (with OMDB data if configured) |
 | `GET /api/magnet?hash=<hash>&name=<name>` | Generate magnet link |
-| `GET /api/download?url=<url>&title=<title>&quality=<quality>` | Download .torrent file |
+| `GET /api/download?url=<url>&title=<title>&quality=<quality>` | Download .torrent to server |
+| `GET /api/download-file?url=<url>&title=<title>&quality=<quality>` | Download .torrent to browser |
 
-## Tech Stack
+## 🛠 Tech Stack
 
-- Go (stdlib only, no frameworks)
-- Embedded static files
-- YTS API
+- **Go** - No external web frameworks (stdlib only)
+- **Embedded static files** - Single binary deployment
+- **YTS API** - Movie and torrent data
+- **OMDB API** - IMDB metadata (optional)
+
+## 📄 License
+
+MIT

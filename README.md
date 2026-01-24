@@ -1,38 +1,26 @@
-# 🎬 C-CLI - Movie Browser TUI
+# 🎬 C-CLI - Movie Browser
 
-A terminal user interface (TUI) for browsing and downloading movies from YTS.
+A Go application for browsing and downloading movies from YTS. Available as both a **terminal UI (TUI)** and a **web app**.
 
 This is a Go rewrite of [cinecli](https://github.com/eyeblech/cinecli), built with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
 ## ✨ Features
 
 - 🔍 Search movies from YTS
-- 🎥 View detailed movie information
-- 🧲 Launch magnet links directly into your torrent client
+- 🎥 View detailed movie information (enhanced with OMDB/IMDB data)
+- 🧲 Generate magnet links
 - 📦 Download `.torrent` files
 - ⚡ Auto-select best torrent (highest quality + healthy seeds)
-- 🖥 Cross-platform (Linux, macOS, Windows)
-- 🎨 Beautiful terminal UI
+- 🖥 Cross-platform (Linux, macOS, Windows, FreeBSD)
 
-## 📦 Installation
+---
 
-```bash
-go install github.com/yourusername/c-cli@latest
-```
+## TUI Version
 
-Or build from source:
+### Build & Run
 
 ```bash
-git clone https://github.com/yourusername/c-cli.git
-cd c-cli
 go build -o c-cli .
-```
-
-## 🚀 Usage
-
-Simply run:
-
-```bash
 ./c-cli
 ```
 
@@ -42,34 +30,57 @@ Simply run:
 |-----|--------|
 | `↑`/`↓` or `j`/`k` | Navigate lists |
 | `Enter` | Select/Confirm |
+| `0-9` | Select torrent by index |
 | `Tab` | Switch between sections |
-| `Esc` or `q` | Go back |
+| `Esc` | Go back |
 | `a` | Auto-select best torrent |
-| `m` | Open magnet link |
+| `m` | Show magnet link |
 | `t` | Download torrent file |
+| `Ctrl+C` | Quit |
 
-### Workflow
+### Configuration
 
-1. **Search** - Enter a movie name
-2. **Select** - Choose from search results
-3. **View Details** - See movie info and available torrents
-4. **Download** - Select torrent and choose magnet or .torrent file
-
-## ⚙️ Configuration
-
-Create a config file at `~/.config/c-cli/config.toml`:
+Create `~/.config/c-cli/config.toml`:
 
 ```toml
-default_action = "magnet"  # or "torrent"
 search_limit = 20
+download_dir = "~/Downloads"
 ```
+
+---
+
+## Web Version
+
+See [`c-cli-web/`](./c-cli-web/) for a web-based interface with the same functionality.
+
+### Quick Start
+
+```bash
+cd c-cli-web
+go build -o c-cli-web .
+OMDB_API_KEY=your_key ./c-cli-web
+```
+
+Then open http://localhost:8000
+
+### Features
+
+- Movie posters and full IMDB metadata (via OMDB API)
+- Download torrents to server or to your browser
+- Click poster to open IMDB page
+- Responsive dark theme UI
+
+See [c-cli-web/README.md](./c-cli-web/README.md) for full documentation.
+
+---
 
 ## 🛠 Tech Stack
 
 - **Go** - Programming language
 - **Bubble Tea** - TUI framework
-- **Lip Gloss** - Styling
-- **YTS API** - Movie data source
+- **Lip Gloss** - TUI styling
+- **YTS API** - Movie/torrent data
+- **OMDB API** - IMDB metadata (optional)
 
 ## 📄 License
 

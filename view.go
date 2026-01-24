@@ -42,7 +42,7 @@ func (m Model) View() string {
 
 func (m Model) viewSearch() string {
 	return fmt.Sprintf(
-		"%s\n\n%s",
+		"%s\n\n> %s",
 		headerStyle.Render("🔍 Search for movies:"),
 		m.textInput.View(),
 	)

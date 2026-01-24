@@ -183,12 +183,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// In search mode, pass most keys to text input first
+	if m.state == viewSearch {
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "enter":
+			return m.handleEnter()
+		default:
+			// Pass all other keys to text input
+			var cmd tea.Cmd
+			m.textInput, cmd = m.textInput.Update(msg)
+			return m, cmd
+		}
+	}
+
+	// Non-search mode key handling
 	switch msg.String() {
 	case "ctrl+c", "q":
-		if m.state == viewSearch {
+		if m.state == viewLoading {
 			return m, tea.Quit
 		}
-		// Go back
 		return m.goBack(), nil
 
 	case "esc":
@@ -241,13 +256,6 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.openTorrent()
 		}
 		return m, nil
-	}
-
-	// Pass to text input in search mode
-	if m.state == viewSearch {
-		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		return m, cmd
 	}
 
 	return m, nil

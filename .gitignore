@@ -1,5 +1,4 @@
-# Binary
-c-cli
+*.torrent
 
 # IDE
 .idea/

@@ -61,7 +61,7 @@ var (
 
 // Messages
 type searchResultMsg struct {
-	movies []Movie
+	result SearchResult
 	err    error
 }
 
@@ -96,6 +96,12 @@ type Model struct {
 	width        int
 	height       int
 	searchSource SearchSource
+	// Pagination
+	page         int
+	totalPages   int
+	totalResults int
+	perPage      int
+	lastQuery    string
 }
 
 func NewModel() Model {
@@ -122,6 +128,8 @@ func NewModel() Model {
 		width:        80,
 		height:       24,
 		searchSource: source,
+		page:         1,
+		perPage:      20,
 	}
 }
 
@@ -150,12 +158,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = viewSearch
 			return m, nil
 		}
-		if len(msg.movies) == 0 {
-			m.err = fmt.Errorf("no movies found")
+		if len(msg.result.Movies) == 0 {
+			m.err = fmt.Errorf("no results found")
 			m.state = viewSearch
 			return m, nil
 		}
-		m.movies = msg.movies
+		m.movies = msg.result.Movies
+		m.totalResults = msg.result.Total
+		m.totalPages = msg.result.TotalPages
+		m.page = msg.result.Page
 		m.selected = 0
 		m.state = viewResults
 		m.err = nil
@@ -298,6 +309,24 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case "left", "[":
+		// Previous page
+		if m.state == viewResults && m.page > 1 {
+			m.page--
+			m.state = viewLoading
+			return m, tea.Batch(m.spinner.Tick, m.searchMovies(m.lastQuery, m.page))
+		}
+		return m, nil
+
+	case "right", "]":
+		// Next page
+		if m.state == viewResults && m.page < m.totalPages {
+			m.page++
+			m.state = viewLoading
+			return m, tea.Batch(m.spinner.Tick, m.searchMovies(m.lastQuery, m.page))
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -357,9 +386,11 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		if query == "" {
 			return m, nil
 		}
+		m.lastQuery = query
+		m.page = 1
 		m.state = viewLoading
 		m.err = nil
-		return m, tea.Batch(m.spinner.Tick, m.searchMovies(query))
+		return m, tea.Batch(m.spinner.Tick, m.searchMovies(query, 1))
 
 	case viewResults:
 		if len(m.movies) == 0 {
@@ -392,10 +423,10 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) searchMovies(query string) tea.Cmd {
+func (m Model) searchMovies(query string, page int) tea.Cmd {
 	return func() tea.Msg {
-		movies, err := SearchMovies(query, config.SearchLimit, m.searchSource)
-		return searchResultMsg{movies: movies, err: err}
+		result, err := SearchMovies(query, page, m.perPage, m.searchSource)
+		return searchResultMsg{result: result, err: err}
 	}
 }
 

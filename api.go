@@ -68,8 +68,18 @@ type OMDBMovie struct {
 type searchResponse struct {
 	Status string `json:"status"`
 	Data   struct {
-		Movies []Movie `json:"movies"`
+		MovieCount int     `json:"movie_count"`
+		Movies     []Movie `json:"movies"`
 	} `json:"data"`
+}
+
+// SearchResult contains paginated search results
+type SearchResult struct {
+	Movies       []Movie
+	Total        int
+	Page         int
+	PerPage      int
+	TotalPages   int
 }
 
 type detailResponse struct {
@@ -104,29 +114,30 @@ var httpClient = &http.Client{
 	Timeout: 15 * time.Second,
 }
 
-func SearchMovies(query string, limit int, source SearchSource) ([]Movie, error) {
+func SearchMovies(query string, page, perPage int, source SearchSource) (SearchResult, error) {
 	switch source {
 	case SourceTorrentsCSV:
-		return searchTorrentsCSV(query, limit)
+		return searchTorrentsCSV(query, page, perPage)
 	default:
-		return searchYTS(query, limit)
+		return searchYTS(query, page, perPage)
 	}
 }
 
-func searchYTS(query string, limit int) ([]Movie, error) {
+func searchYTS(query string, page, perPage int) (SearchResult, error) {
 	params := url.Values{}
 	params.Set("query_term", query)
-	params.Set("limit", fmt.Sprintf("%d", limit))
+	params.Set("limit", fmt.Sprintf("%d", perPage))
+	params.Set("page", fmt.Sprintf("%d", page))
 
 	resp, err := httpClient.Get(fmt.Sprintf("%s/list_movies.json?%s", ytsBaseURL, params.Encode()))
 	if err != nil {
-		return nil, err
+		return SearchResult{}, err
 	}
 	defer resp.Body.Close()
 
 	var result searchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+		return SearchResult{}, err
 	}
 
 	movies := result.Data.Movies
@@ -139,29 +150,43 @@ func searchYTS(query string, limit int) ([]Movie, error) {
 		movies = enrichAndSortMovies(movies)
 	}
 
-	return movies, nil
+	total := result.Data.MovieCount
+	totalPages := (total + perPage - 1) / perPage
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return SearchResult{
+		Movies:     movies,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
 }
 
-func searchTorrentsCSV(query string, limit int) ([]Movie, error) {
+func searchTorrentsCSV(query string, page, perPage int) (SearchResult, error) {
+	// Fetch larger batch and paginate locally (Torrents-CSV uses cursor pagination)
+	fetchSize := 200
 	params := url.Values{}
 	params.Set("q", query)
-	params.Set("size", fmt.Sprintf("%d", limit))
+	params.Set("size", fmt.Sprintf("%d", fetchSize))
 
 	resp, err := httpClient.Get(fmt.Sprintf("%s?%s", torrentsCSVURL, params.Encode()))
 	if err != nil {
-		return nil, err
+		return SearchResult{}, err
 	}
 	defer resp.Body.Close()
 
 	var result TorrentsCSVResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+		return SearchResult{}, err
 	}
 
-	movies := make([]Movie, 0, len(result.Torrents))
+	allMovies := make([]Movie, 0, len(result.Torrents))
 	for _, t := range result.Torrents {
 		year := extractYear(t.Name)
-		movies = append(movies, Movie{
+		allMovies = append(allMovies, Movie{
 			Title:    cleanTorrentName(t.Name),
 			Year:     year,
 			Source:   SourceTorrentsCSV,
@@ -180,12 +205,36 @@ func searchTorrentsCSV(query string, limit int) ([]Movie, error) {
 		})
 	}
 
-	// Enrich with OMDB if available
-	if config.OMDBAPIKey != "" && len(movies) > 0 {
-		movies = enrichTorrentsCSVMovies(movies)
+	total := len(allMovies)
+	totalPages := (total + perPage - 1) / perPage
+	if totalPages < 1 {
+		totalPages = 1
 	}
 
-	return movies, nil
+	// Paginate
+	start := (page - 1) * perPage
+	end := start + perPage
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	pageMovies := allMovies[start:end]
+
+	// Enrich only current page with OMDB
+	if config.OMDBAPIKey != "" && len(pageMovies) > 0 {
+		pageMovies = enrichTorrentsCSVMovies(pageMovies)
+	}
+
+	return SearchResult{
+		Movies:     pageMovies,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func GetMovieDetails(movieID int) (*Movie, error) {

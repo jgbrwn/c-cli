@@ -178,6 +178,51 @@
       font-size: 12px;
       margin-top: 8px;
     }
+    
+    /* Pagination styles */
+    .pagination-info {
+      color: #888;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+      padding: 15px 0;
+    }
+    .page-btn {
+      background: #3498db;
+      padding: 10px 20px;
+    }
+    .page-btn:hover {
+      background: #5dade2;
+    }
+    .page-numbers {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    .page-num {
+      background: #16213e;
+      padding: 8px 14px;
+      min-width: 40px;
+      border: 1px solid #333;
+    }
+    .page-num:hover {
+      background: #1f3460;
+    }
+    .page-num.active {
+      background: #e94560;
+      border-color: #e94560;
+      cursor: default;
+    }
+    .page-ellipsis {
+      color: #888;
+      padding: 0 5px;
+    }
   </style>
 </head>
 <body>
@@ -204,15 +249,23 @@
       if (e.key === 'Enter') search();
     });
     
-    async function search() {
+    // Global state for pagination
+    let currentPage = 1;
+    let currentQuery = '';
+    let currentSource = 'yts';
+    
+    async function search(page = 1) {
       const query = searchInput.value.trim();
       if (!query) return;
       
-      const source = document.getElementById('sourceSelect').value;
+      currentQuery = query;
+      currentSource = document.getElementById('sourceSelect').value;
+      currentPage = page;
+      
       content.innerHTML = '<div class="loading">Searching...</div>';
       
       try {
-        const resp = await fetch(`/api/search?q=${encodeURIComponent(query)}&source=${source}`);
+        const resp = await fetch(`/api/search?q=${encodeURIComponent(query)}&source=${currentSource}&page=${page}&per_page=20`);
         const data = await resp.json();
         
         if (!resp.ok) {
@@ -220,27 +273,38 @@
           return;
         }
         
-        if (!data || !Array.isArray(data) || data.length === 0) {
-          content.innerHTML = '<div class="error">No movies found</div>';
+        // Handle paginated response
+        const results = data.results || data;
+        const pagination = data.total ? data : null;
+        
+        if (!results || results.length === 0) {
+          content.innerHTML = '<div class="error">No results found</div>';
           return;
         }
         
-        const movies = data;
+        let html = '';
         
-        if (source === 'yts') {
-          content.innerHTML = '<div class="movies">' + movies.map(m => `
+        // Pagination header
+        if (pagination) {
+          html += `<div class="pagination-info">Showing ${(pagination.page - 1) * pagination.per_page + 1}-${Math.min(pagination.page * pagination.per_page, pagination.total)} of ${pagination.total} results</div>`;
+        }
+        
+        html += '<div class="movies">';
+        
+        if (currentSource === 'yts') {
+          html += results.map(m => `
             <div class="movie" onclick="showMovie(${m.id})">
-              ${m.small_cover_image ? `<img class="movie-thumb" src="${m.small_cover_image}" alt="">` : ''}
+              ${m.small_cover_image ? `<img class="movie-thumb" src="${m.small_cover_image}" alt="">` : '<div class="movie-thumb-placeholder">🎬</div>'}
               <div class="movie-info">
                 <h3>${escapeHtml(m.title)}</h3>
                 <span>${m.year || ''}${m.runtime ? ` • ${m.runtime} min` : ''}</span>
               </div>
               ${m.rating ? `<div class="movie-rating">⭐ ${m.rating}</div>` : ''}
             </div>
-          `).join('') + '</div>';
+          `).join('');
         } else {
           // Torrents-CSV format
-          content.innerHTML = '<div class="movies">' + movies.map(m => {
+          html += results.map(m => {
             const isSeries = m.omdb?.Type === 'series';
             const isEpisode = m.omdb?.Type === 'episode';
             const isTVContent = isSeries || isEpisode;
@@ -255,8 +319,53 @@
               </div>
               ${m.omdb?.imdbRating && m.omdb.imdbRating !== 'N/A' ? `<div class="movie-rating">⭐ ${m.omdb.imdbRating}</div>` : ''}
             </div>
-          `}).join('') + '</div>';
+          `}).join('');
         }
+        
+        html += '</div>';
+        
+        // Pagination controls
+        if (pagination && pagination.total_pages > 1) {
+          html += '<div class="pagination">';
+          
+          // Previous button
+          if (pagination.page > 1) {
+            html += `<button onclick="search(${pagination.page - 1})" class="page-btn">← Previous</button>`;
+          }
+          
+          // Page numbers
+          html += '<span class="page-numbers">';
+          const startPage = Math.max(1, pagination.page - 2);
+          const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+          
+          if (startPage > 1) {
+            html += `<button onclick="search(1)" class="page-num">1</button>`;
+            if (startPage > 2) html += '<span class="page-ellipsis">...</span>';
+          }
+          
+          for (let i = startPage; i <= endPage; i++) {
+            if (i === pagination.page) {
+              html += `<button class="page-num active">${i}</button>`;
+            } else {
+              html += `<button onclick="search(${i})" class="page-num">${i}</button>`;
+            }
+          }
+          
+          if (endPage < pagination.total_pages) {
+            if (endPage < pagination.total_pages - 1) html += '<span class="page-ellipsis">...</span>';
+            html += `<button onclick="search(${pagination.total_pages})" class="page-num">${pagination.total_pages}</button>`;
+          }
+          html += '</span>';
+          
+          // Next button
+          if (pagination.page < pagination.total_pages) {
+            html += `<button onclick="search(${pagination.page + 1})" class="page-btn">Next →</button>`;
+          }
+          
+          html += '</div>';
+        }
+        
+        content.innerHTML = html;
       } catch (err) {
         content.innerHTML = `<div class="error">Error: ${err.message}</div>`;
       }

@@ -59,7 +59,19 @@ func (m Model) viewLoading() string {
 
 func (m Model) viewResults() string {
 	var b strings.Builder
-	b.WriteString(headerStyle.Render("🎬 Search Results") + "\n\n")
+	b.WriteString(headerStyle.Render("🎬 Search Results") + "\n")
+	
+	// Pagination info
+	if m.totalResults > 0 {
+		start := (m.page-1)*m.perPage + 1
+		end := m.page * m.perPage
+		if end > m.totalResults {
+			end = m.totalResults
+		}
+		pageInfo := fmt.Sprintf("Showing %d-%d of %d (Page %d/%d)", start, end, m.totalResults, m.page, m.totalPages)
+		b.WriteString(dimStyle.Render(pageInfo) + "\n")
+	}
+	b.WriteString("\n")
 
 	if len(m.movies) > 0 && m.movies[0].Source == SourceTorrentsCSV {
 		// Torrents-CSV format
@@ -349,7 +361,7 @@ func (m Model) viewHelp() string {
 	case viewLoading:
 		help = "loading..."
 	case viewResults:
-		help = "↑/↓: navigate • enter: select • esc: back"
+		help = "↑/↓: navigate • ←/→ or [/]: page • enter: select • esc: back"
 	case viewDetails, viewTorrents:
 		help = "↑/↓/0-9: select torrent • enter/m: show magnet • t: download .torrent • a: auto-best • esc: back"
 	}

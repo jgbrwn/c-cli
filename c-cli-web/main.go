@@ -108,7 +108,8 @@ type Torrent struct {
 type searchResponse struct {
 	Status string `json:"status"`
 	Data   struct {
-		Movies []Movie `json:"movies"`
+		MovieCount int     `json:"movie_count"`
+		Movies     []Movie `json:"movies"`
 	} `json:"data"`
 }
 
@@ -122,6 +123,7 @@ type detailResponse struct {
 // TorrentsCSV types
 type TorrentsCSVResponse struct {
 	Torrents []TorrentsCSVItem `json:"torrents"`
+	Next     *int              `json:"next,omitempty"` // Cursor for next page
 }
 
 type TorrentsCSVItem struct {
@@ -438,6 +440,15 @@ func looksLikeTVShow(name string) bool {
 	return false
 }
 
+// PaginatedResponse wraps search results with pagination info
+type PaginatedResponse struct {
+	Results    interface{} `json:"results"`
+	Page       int         `json:"page"`
+	PerPage    int         `json:"per_page"`
+	Total      int         `json:"total"`
+	TotalPages int         `json:"total_pages"`
+}
+
 func handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -450,27 +461,36 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		source = "yts" // default
 	}
 
-	limit := 50
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
-			limit = n
+	// Pagination parameters
+	page := 1
+	if p := r.URL.Query().Get("page"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil && n > 0 {
+			page = n
+		}
+	}
+
+	perPage := 20
+	if pp := r.URL.Query().Get("per_page"); pp != "" {
+		if n, err := strconv.Atoi(pp); err == nil && n > 0 && n <= 100 {
+			perPage = n
 		}
 	}
 
 	switch source {
 	case "yts":
-		handleYTSSearch(w, query, limit)
+		handleYTSSearch(w, query, page, perPage)
 	case "torrents-csv", "tcsv":
-		handleTorrentsCSVSearch(w, query, limit)
+		handleTorrentsCSVSearch(w, query, page, perPage)
 	default:
 		jsonError(w, "invalid source, use 'yts' or 'torrents-csv'", http.StatusBadRequest)
 	}
 }
 
-func handleYTSSearch(w http.ResponseWriter, query string, limit int) {
+func handleYTSSearch(w http.ResponseWriter, query string, page, perPage int) {
 	params := url.Values{}
 	params.Set("query_term", query)
-	params.Set("limit", strconv.Itoa(limit))
+	params.Set("limit", strconv.Itoa(perPage))
+	params.Set("page", strconv.Itoa(page))
 
 	resp, err := httpClient.Get(fmt.Sprintf("%s/list_movies.json?%s", ytsBaseURL, params.Encode()))
 	if err != nil {
@@ -495,13 +515,28 @@ func handleYTSSearch(w http.ResponseWriter, query string, limit int) {
 		movies = enrichAndSortMovies(movies)
 	}
 
-	jsonResponse(w, movies)
+	total := result.Data.MovieCount
+	totalPages := (total + perPage - 1) / perPage
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	jsonResponse(w, PaginatedResponse{
+		Results:    movies,
+		Page:       page,
+		PerPage:    perPage,
+		Total:      total,
+		TotalPages: totalPages,
+	})
 }
 
-func handleTorrentsCSVSearch(w http.ResponseWriter, query string, limit int) {
+func handleTorrentsCSVSearch(w http.ResponseWriter, query string, page, perPage int) {
+	// Fetch a larger batch from Torrents-CSV (they use cursor pagination)
+	// We'll fetch up to 200 results and paginate on our side
+	fetchSize := 200
 	params := url.Values{}
 	params.Set("q", query)
-	params.Set("size", strconv.Itoa(limit))
+	params.Set("size", strconv.Itoa(fetchSize))
 
 	resp, err := httpClient.Get(fmt.Sprintf("%s?%s", torrentsCSVURL, params.Encode()))
 	if err != nil {
@@ -517,10 +552,10 @@ func handleTorrentsCSVSearch(w http.ResponseWriter, query string, limit int) {
 	}
 
 	// Convert to SearchResult format
-	results := make([]SearchResult, 0, len(result.Torrents))
+	allResults := make([]SearchResult, 0, len(result.Torrents))
 	for _, t := range result.Torrents {
 		year, imdbCode := extractYearAndIMDB(t.Name)
-		results = append(results, SearchResult{
+		allResults = append(allResults, SearchResult{
 			ID:       t.Infohash,
 			Title:    cleanTorrentName(t.Name),
 			Year:     year,
@@ -533,12 +568,37 @@ func handleTorrentsCSVSearch(w http.ResponseWriter, query string, limit int) {
 		})
 	}
 
-	// Enrich with OMDB if available
-	if omdbAPIKey != "" && len(results) > 0 {
-		results = enrichTorrentsCSVResults(results)
+	// Enrich with OMDB if available (only enrich current page to avoid too many API calls)
+	total := len(allResults)
+	totalPages := (total + perPage - 1) / perPage
+	if totalPages < 1 {
+		totalPages = 1
 	}
 
-	jsonResponse(w, results)
+	// Paginate
+	start := (page - 1) * perPage
+	end := start + perPage
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	pageResults := allResults[start:end]
+
+	// Enrich only the current page with OMDB
+	if omdbAPIKey != "" && len(pageResults) > 0 {
+		pageResults = enrichTorrentsCSVResults(pageResults)
+	}
+
+	jsonResponse(w, PaginatedResponse{
+		Results:    pageResults,
+		Page:       page,
+		PerPage:    perPage,
+		Total:      total,
+		TotalPages: totalPages,
+	})
 }
 
 func handleMovieDetails(w http.ResponseWriter, r *http.Request) {

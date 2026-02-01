@@ -305,14 +305,18 @@ func formatBytes(bytes int64) string {
 // extractShowName extracts the show/movie name from a torrent title
 // For TV shows like "Breaking Bad S01E01", returns "Breaking Bad"
 func extractShowName(title string) string {
-	// TV show patterns to remove
+	// TV show patterns to remove - order matters, more specific first
 	patterns := []string{
-		`(?i)\s*s\d{1,2}e\d{1,2}.*$`,        // S01E01 and everything after
-		`(?i)\s*s\d{1,2}\s*$`,                 // S01 at end
-		`(?i)\s*season\s*\d+.*$`,              // Season 1 and everything after
-		`(?i)\s*\d{1,2}x\d{1,2}.*$`,           // 1x01 and everything after
-		`(?i)\s*complete\s*(series|season).*$`,
-		`(?i)\s*all\s*seasons.*$`,
+		`(?i)\s*-?\s*s\d{1,2}e\d{1,2}.*$`,     // S01E01 and everything after
+		`(?i)\s*-?\s*s\d{1,2}\s*-?\s*s\d{1,2}.*$`, // S01-S05 range
+		`(?i)\s*-?\s*s\d{1,2}.*$`,             // S01 and everything after
+		`(?i)\s*-?\s*season\s*\d+.*$`,         // Season 1 and everything after
+		`(?i)\s*-?\s*\d{1,2}x\d{1,2}.*$`,      // 1x01 and everything after
+		`(?i)\s*-?\s*complete\s*(series|season|collection).*$`,
+		`(?i)\s*-?\s*all\s*seasons.*$`,
+		`(?i)\s*-?\s*full\s*series.*$`,
+		`(?i)\s*\(\d{4}\)\s*$`,                 // Year in parentheses at end
+		`(?i)\s*\d{4}\s*$`,                     // Year at end
 	}
 	
 	result := title
@@ -320,6 +324,9 @@ func extractShowName(title string) string {
 		re := regexp.MustCompile(p)
 		result = re.ReplaceAllString(result, "")
 	}
+	
+	// Also remove common suffixes that might remain
+	result = regexp.MustCompile(`(?i)\s*-\s*$`).ReplaceAllString(result, "")
 	
 	return strings.TrimSpace(result)
 }
@@ -345,14 +352,33 @@ func enrichTorrentsCSVResults(results []SearchResult) []SearchResult {
 				return
 			}
 
+			// Determine if this looks like TV content
+			isTVContent := looksLikeTVShow(r.Title)
+			
 			// For TV shows, extract the show name for better OMDB matching
 			searchTitle := r.Title
-			if looksLikeTVShow(r.Title) {
+			if isTVContent {
 				searchTitle = extractShowName(r.Title)
 			}
 
 			// Try to search by title and year
-			if omdb, err := searchOMDB(searchTitle, r.Year); err == nil && omdb != nil {
+			var omdb *OMDBMovie
+			if isTVContent {
+				// For TV content, search specifically as series first
+				omdb = searchOMDBWithType(searchTitle, r.Year, "series")
+				if omdb == nil {
+					// Fall back to general search
+					omdb = searchOMDBWithType(searchTitle, r.Year, "")
+				}
+			} else {
+				// For non-TV content, try general search first, then movie
+				omdb = searchOMDBWithType(searchTitle, r.Year, "")
+				if omdb == nil {
+					omdb = searchOMDBWithType(searchTitle, r.Year, "movie")
+				}
+			}
+			
+			if omdb != nil {
 				mu.Lock()
 				r.OMDB = omdb
 				r.IMDBCode = omdb.IMDBID

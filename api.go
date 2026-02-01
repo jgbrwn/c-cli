@@ -407,12 +407,29 @@ func enrichTorrentsCSVMovies(movies []Movie) []Movie {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			
+			// Determine if this looks like TV content
+			isTVContent := looksLikeTVShow(movies[idx].Title)
+			
 			// For TV shows, extract the show name for better OMDB matching
 			searchTitle := movies[idx].Title
-			if looksLikeTVShow(movies[idx].Title) {
+			if isTVContent {
 				searchTitle = extractShowName(movies[idx].Title)
 			}
-			if omdb, err := searchOMDB(searchTitle, movies[idx].Year); err == nil && omdb != nil {
+			
+			var omdb *OMDBMovie
+			if isTVContent {
+				// For TV content, search specifically as series first
+				omdb = searchOMDBWithType(searchTitle, movies[idx].Year, "series")
+				if omdb == nil {
+					omdb = searchOMDBWithType(searchTitle, movies[idx].Year, "")
+				}
+			} else {
+				// For non-TV content, try general search
+				omdb = searchOMDBWithType(searchTitle, movies[idx].Year, "")
+			}
+			
+			if omdb != nil {
 				mu.Lock()
 				movies[idx].OMDB = omdb
 				movies[idx].IMDBCode = omdb.IMDBID
@@ -501,13 +518,18 @@ func looksLikeTVShow(name string) bool {
 
 // extractShowName extracts the show/movie name from a torrent title
 func extractShowName(title string) string {
+	// TV show patterns to remove - order matters, more specific first
 	patterns := []string{
-		`(?i)\s*s\d{1,2}e\d{1,2}.*$`,
-		`(?i)\s*s\d{1,2}\s*$`,
-		`(?i)\s*season\s*\d+.*$`,
-		`(?i)\s*\d{1,2}x\d{1,2}.*$`,
-		`(?i)\s*complete\s*(series|season).*$`,
-		`(?i)\s*all\s*seasons.*$`,
+		`(?i)\s*-?\s*s\d{1,2}e\d{1,2}.*$`,     // S01E01 and everything after
+		`(?i)\s*-?\s*s\d{1,2}\s*-?\s*s\d{1,2}.*$`, // S01-S05 range
+		`(?i)\s*-?\s*s\d{1,2}.*$`,             // S01 and everything after
+		`(?i)\s*-?\s*season\s*\d+.*$`,         // Season 1 and everything after
+		`(?i)\s*-?\s*\d{1,2}x\d{1,2}.*$`,      // 1x01 and everything after
+		`(?i)\s*-?\s*complete\s*(series|season|collection).*$`,
+		`(?i)\s*-?\s*all\s*seasons.*$`,
+		`(?i)\s*-?\s*full\s*series.*$`,
+		`(?i)\s*\(\d{4}\)\s*$`,                 // Year in parentheses at end
+		`(?i)\s*\d{4}\s*$`,                     // Year at end
 	}
 	
 	result := title
@@ -515,6 +537,9 @@ func extractShowName(title string) string {
 		re := regexp.MustCompile(p)
 		result = re.ReplaceAllString(result, "")
 	}
+	
+	// Also remove common suffixes that might remain
+	result = regexp.MustCompile(`(?i)\s*-\s*$`).ReplaceAllString(result, "")
 	
 	return strings.TrimSpace(result)
 }

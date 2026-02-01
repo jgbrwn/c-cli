@@ -16,6 +16,7 @@ A web interface for browsing and downloading movies and TV shows, with IMDB meta
   - Creator information for series
   - Type badges (📺 Series) in search results
 - 📊 Search results sorted by IMDB popularity
+- 📄 **Pagination** - Navigate through unlimited results with page controls
 - 🧲 Generate magnet links (with copy to clipboard)
 - ⬇ Download `.torrent` files to server
 - 💾 Download `.torrent` files to your browser/computer
@@ -65,7 +66,7 @@ PORT=3000 DOWNLOAD_DIR=/data/torrents OMDB_API_KEY=abc123 ./c-cli-web
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Web UI |
-| `GET /api/search?q=<query>&source=<yts\|torrents-csv>` | Search movies/TV shows/torrents |
+| `GET /api/search?q=<query>&source=<yts\|torrents-csv>&page=<n>&per_page=<n>` | Search with pagination (default: page=1, per_page=20) |
 | `GET /api/movie/<id>` | Get movie details (with OMDB data if configured) |
 | `GET /api/omdb?i=<imdb_id>` or `?t=<title>&y=<year>` | Lookup OMDB data directly |
 | `GET /api/magnet?hash=<hash>&name=<name>` | Generate magnet link |

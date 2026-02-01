@@ -12,6 +12,7 @@ Inspired by [cinecli](https://github.com/eyeblech/cinecli) by [@eyeblech](https:
 - 🎬📺 View detailed movie & TV show information (enriched with IMDB data via OMDB)
 - 📺 **TV Show Support** - Automatic detection of TV series with season counts, episode runtimes, creators
 - 📊 Search results sorted by IMDB popularity
+- 📄 **Pagination** - Navigate through large result sets
 - 🧲 Generate magnet links
 - 📦 Download `.torrent` files
 - ⚡ Auto-select best torrent (highest quality + healthy seeds)
@@ -50,6 +51,7 @@ OMDB_API_KEY=your_key ./c-cli
 | Key | Action |
 |-----|--------|
 | `↑`/`↓` or `j`/`k` | Navigate lists |
+| `←`/`→` or `[`/`]` | Previous/Next page (search results) |
 | `Enter` | Select / Show magnet link |
 | `0-9` | Select torrent by index |
 | `Tab` | Switch source (search) / Switch sections |

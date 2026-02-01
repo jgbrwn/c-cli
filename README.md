@@ -121,6 +121,7 @@ Then open http://localhost:8000
 - 🧲 Magnet links with copy to clipboard
 - ⬇ Download `.torrent` to server
 - 💾 Download `.torrent` to your browser
+- 🧲 **Torrent Cache Integration** - Fetches .torrent files from cache services for Torrents-CSV
 - 🔗 Click poster to open IMDB page
 - 🌙 Dark theme UI
 

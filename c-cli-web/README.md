@@ -20,6 +20,7 @@ A web interface for browsing and downloading movies and TV shows, with IMDB meta
 - 🧲 Generate magnet links (with copy to clipboard)
 - ⬇ Download `.torrent` files to server
 - 💾 Download `.torrent` files to your browser/computer
+- 🧲 **Torrent Cache Integration** - Fetches actual .torrent files from cache services (itorrents.org, btcache.me) for Torrents-CSV results
 - 🎬 Click poster to open IMDB page
 
 ## 🚀 Usage
@@ -50,10 +51,10 @@ All configuration is via environment variables:
 
 With OMDB enabled:
 - Search results sorted by IMDB popularity (vote count)
-- Returns up to 50 results (default)
 - Full movie details: rating, runtime, director, cast, plot
 - Full TV show details: rating, seasons, episode runtime, creator, cast, plot
 - Type detection (movie vs series vs episode)
+- Smart title matching (strips year/codec info for better OMDB matches)
 
 ### Example
 
@@ -72,7 +73,8 @@ PORT=3000 DOWNLOAD_DIR=/data/torrents OMDB_API_KEY=abc123 ./c-cli-web
 | `GET /api/magnet?hash=<hash>&name=<name>` | Generate magnet link |
 | `GET /api/download?url=<url>&title=<title>&quality=<quality>` | Download .torrent to server |
 | `GET /api/download-file?url=<url>&title=<title>&quality=<quality>` | Download .torrent to browser |
-| `GET /api/save-magnet?infohash=<hash>&title=<title>` | Save magnet link to server (for torrents-csv) |
+| `GET /api/save-magnet?infohash=<hash>&title=<title>` | Save .torrent to server (tries cache services, falls back to .magnet) |
+| `GET /api/download-torrent?infohash=<hash>&title=<title>` | Download .torrent to browser (tries cache services, falls back to .magnet) |
 
 ## 🛠 Tech Stack
 

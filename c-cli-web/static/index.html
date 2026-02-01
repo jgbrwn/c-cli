@@ -224,8 +224,6 @@
         
         const movies = data;
         
-        const source = document.getElementById('sourceSelect').value;
-        
         if (source === 'yts') {
           content.innerHTML = '<div class="movies">' + movies.map(m => `
             <div class="movie" onclick="showMovie(${m.id})">
@@ -443,7 +441,7 @@
     }
     
     function showMagnetDirect(infohash, title, idx) {
-      const magnet = \`magnet:?xt=urn:btih:\${infohash}&dn=\${encodeURIComponent(title)}&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80/announce&tr=udp://tracker.opentrackr.org:1337/announce\`;
+      const magnet = `magnet:?xt=urn:btih:${infohash}&dn=${encodeURIComponent(title)}&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80/announce&tr=udp://tracker.opentrackr.org:1337/announce`;
       
       const container = document.getElementById(`torrent-${idx}`);
       const existing = container.querySelector('.magnet-display');

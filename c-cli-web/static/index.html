@@ -311,11 +311,11 @@
             const placeholder = isTVContent ? '📺' : '🎬';
             const typeTag = isSeries ? '<span class="type-tag series">📺 Series</span>' : (isEpisode ? '<span class="type-tag episode">📺 Episode</span>' : '');
             return `
-            <div class="movie" onclick="showTorrent('${m.id}', '${escapeJs(m.title)}', '${m.size}', ${m.seeders}, ${m.leechers}, '${m.imdb_code || ''}')">
+            <div class="movie" onclick="showTorrent('${m.id}', '${escapeJs(m.title)}', '${m.size}', ${m.seeders || 0}, ${m.leechers || 0}, '${m.imdb_code || ''}')">
               ${m.omdb?.Poster && m.omdb.Poster !== 'N/A' ? `<img class="movie-thumb" src="${m.omdb.Poster}" alt="">` : `<div class="movie-thumb-placeholder">${placeholder}</div>`}
               <div class="movie-info">
                 <h3>${escapeHtml(m.title)} ${typeTag}</h3>
-                <span>${m.year || ''} • ${m.size} • ⬆${m.seeders} ⬇${m.leechers}${m.omdb?.totalSeasons ? ` • ${m.omdb.totalSeasons} seasons` : ''}</span>
+                <span>${m.year || ''} • ${m.size} • ⬆${m.seeders || 0} ⬇${m.leechers || 0}${m.omdb?.totalSeasons ? ` • ${m.omdb.totalSeasons} seasons` : ''}</span>
               </div>
               ${m.omdb?.imdbRating && m.omdb.imdbRating !== 'N/A' ? `<div class="movie-rating">⭐ ${m.omdb.imdbRating}</div>` : ''}
             </div>

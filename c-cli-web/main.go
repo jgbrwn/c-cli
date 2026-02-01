@@ -144,8 +144,8 @@ type SearchResult struct {
 	Source    string     `json:"source"` // "yts" or "torrents-csv"
 	Infohash  string     `json:"infohash,omitempty"`
 	Size      string     `json:"size,omitempty"`
-	Seeders   int        `json:"seeders,omitempty"`
-	Leechers  int        `json:"leechers,omitempty"`
+	Seeders   int        `json:"seeders"`
+	Leechers  int        `json:"leechers"`
 	IMDBCode  string     `json:"imdb_code,omitempty"`
 	OMDB      *OMDBMovie `json:"omdb,omitempty"`
 	// YTS specific
@@ -260,6 +260,23 @@ func extractYearAndIMDB(name string) (int, string) {
 	return year, imdbCode
 }
 
+// cleanTitleForOMDB removes year and other suffixes that interfere with OMDB search
+func cleanTitleForOMDB(title string) string {
+	// Remove year in parentheses like "(2022)" or "(2022)" at end
+	re := regexp.MustCompile(`\s*\(\d{4}\)\s*$`)
+	title = re.ReplaceAllString(title, "")
+	
+	// Remove year without parentheses at end
+	re = regexp.MustCompile(`\s+\d{4}\s*$`)
+	title = re.ReplaceAllString(title, "")
+	
+	// Remove common quality/codec tags that might remain
+	re = regexp.MustCompile(`(?i)\s*(10bit|AV1|AV1tester|HDR|HEVC|x264|x265).*$`)
+	title = re.ReplaceAllString(title, "")
+	
+	return strings.TrimSpace(title)
+}
+
 func cleanTorrentName(name string) string {
 	// Remove common torrent tags and clean up the name
 	cleaners := []string{
@@ -356,10 +373,10 @@ func enrichTorrentsCSVResults(results []SearchResult) []SearchResult {
 			// Determine if this looks like TV content
 			isTVContent := looksLikeTVShow(r.Title)
 			
-			// For TV shows, extract the show name for better OMDB matching
-			searchTitle := r.Title
+			// Clean the title for OMDB search
+			searchTitle := cleanTitleForOMDB(r.Title)
 			if isTVContent {
-				searchTitle = extractShowName(r.Title)
+				searchTitle = extractShowName(searchTitle)
 			}
 
 			// Try to search by title and year
@@ -417,6 +434,22 @@ func searchOMDB(title string, year int) (*OMDBMovie, error) {
 }
 
 func searchOMDBWithType(title string, year int, mediaType string) *OMDBMovie {
+	if omdbAPIKey == "" {
+		return nil
+	}
+	
+	// Try with year first
+	if year > 0 {
+		if result := doOMDBSearch(title, year, mediaType); result != nil {
+			return result
+		}
+	}
+	
+	// Try without year as fallback
+	return doOMDBSearch(title, 0, mediaType)
+}
+
+func doOMDBSearch(title string, year int, mediaType string) *OMDBMovie {
 	params := url.Values{}
 	params.Set("t", title)
 	params.Set("apikey", omdbAPIKey)

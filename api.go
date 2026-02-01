@@ -411,10 +411,10 @@ func enrichTorrentsCSVMovies(movies []Movie) []Movie {
 			// Determine if this looks like TV content
 			isTVContent := looksLikeTVShow(movies[idx].Title)
 			
-			// For TV shows, extract the show name for better OMDB matching
-			searchTitle := movies[idx].Title
+			// Clean the title for OMDB search
+			searchTitle := cleanTitleForOMDB(movies[idx].Title)
 			if isTVContent {
-				searchTitle = extractShowName(movies[idx].Title)
+				searchTitle = extractShowName(searchTitle)
 			}
 			
 			var omdb *OMDBMovie
@@ -467,6 +467,22 @@ func searchOMDB(title string, year int) (*OMDBMovie, error) {
 }
 
 func searchOMDBWithType(title string, year int, mediaType string) *OMDBMovie {
+	if config.OMDBAPIKey == "" {
+		return nil
+	}
+	
+	// Try with year first
+	if year > 0 {
+		if result := doOMDBSearch(title, year, mediaType); result != nil {
+			return result
+		}
+	}
+	
+	// Try without year as fallback
+	return doOMDBSearch(title, 0, mediaType)
+}
+
+func doOMDBSearch(title string, year int, mediaType string) *OMDBMovie {
 	params := url.Values{}
 	params.Set("t", title)
 	params.Set("apikey", config.OMDBAPIKey)
@@ -514,6 +530,23 @@ func looksLikeTVShow(name string) bool {
 		}
 	}
 	return false
+}
+
+// cleanTitleForOMDB removes year and other suffixes that interfere with OMDB search
+func cleanTitleForOMDB(title string) string {
+	// Remove year in parentheses like "(2022)" at end
+	re := regexp.MustCompile(`\s*\(\d{4}\)\s*$`)
+	title = re.ReplaceAllString(title, "")
+	
+	// Remove year without parentheses at end
+	re = regexp.MustCompile(`\s+\d{4}\s*$`)
+	title = re.ReplaceAllString(title, "")
+	
+	// Remove common quality/codec tags that might remain
+	re = regexp.MustCompile(`(?i)\s*(10bit|AV1|AV1tester|HDR|HEVC|x264|x265).*$`)
+	title = re.ReplaceAllString(title, "")
+	
+	return strings.TrimSpace(title)
 }
 
 // extractShowName extracts the show/movie name from a torrent title

@@ -45,6 +45,7 @@ func main() {
 	http.HandleFunc("/", handleIndex)
 	http.HandleFunc("/api/search", handleSearch)
 	http.HandleFunc("/api/movie/", handleMovieDetails)
+	http.HandleFunc("/api/omdb", handleOMDBLookup)
 	http.HandleFunc("/api/magnet", handleMagnet)
 	http.HandleFunc("/api/download", handleDownloadToServer)
 	http.HandleFunc("/api/download-file", handleDownloadToClient)
@@ -152,21 +153,24 @@ type SearchResult struct {
 
 // OMDB types
 type OMDBMovie struct {
-	Title      string `json:"Title"`
-	Year       string `json:"Year"`
-	Rated      string `json:"Rated"`
-	Released   string `json:"Released"`
-	Runtime    string `json:"Runtime"`
-	Genre      string `json:"Genre"`
-	Director   string `json:"Director"`
-	Actors     string `json:"Actors"`
-	Plot       string `json:"Plot"`
-	Poster     string `json:"Poster"`
-	IMDBRating string `json:"imdbRating"`
-	IMDBVotes  string `json:"imdbVotes"`
-	IMDBID     string `json:"imdbID"`
-	Response   string `json:"Response"`
-	Error      string `json:"Error"`
+	Title        string `json:"Title"`
+	Year         string `json:"Year"`
+	Rated        string `json:"Rated"`
+	Released     string `json:"Released"`
+	Runtime      string `json:"Runtime"`
+	Genre        string `json:"Genre"`
+	Director     string `json:"Director"`
+	Writer       string `json:"Writer"`
+	Actors       string `json:"Actors"`
+	Plot         string `json:"Plot"`
+	Poster       string `json:"Poster"`
+	IMDBRating   string `json:"imdbRating"`
+	IMDBVotes    string `json:"imdbVotes"`
+	IMDBID       string `json:"imdbID"`
+	Type         string `json:"Type"`         // "movie", "series", or "episode"
+	TotalSeasons string `json:"totalSeasons"` // Only for series
+	Response     string `json:"Response"`
+	Error        string `json:"Error"`
 }
 
 func fetchOMDBInfo(imdbID string) (*OMDBMovie, error) {
@@ -296,6 +300,28 @@ func formatBytes(bytes int64) string {
 	return fmt.Sprintf("%.2f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
+// extractShowName extracts the show/movie name from a torrent title
+// For TV shows like "Breaking Bad S01E01", returns "Breaking Bad"
+func extractShowName(title string) string {
+	// TV show patterns to remove
+	patterns := []string{
+		`(?i)\s*s\d{1,2}e\d{1,2}.*$`,        // S01E01 and everything after
+		`(?i)\s*s\d{1,2}\s*$`,                 // S01 at end
+		`(?i)\s*season\s*\d+.*$`,              // Season 1 and everything after
+		`(?i)\s*\d{1,2}x\d{1,2}.*$`,           // 1x01 and everything after
+		`(?i)\s*complete\s*(series|season).*$`,
+		`(?i)\s*all\s*seasons.*$`,
+	}
+	
+	result := title
+	for _, p := range patterns {
+		re := regexp.MustCompile(p)
+		result = re.ReplaceAllString(result, "")
+	}
+	
+	return strings.TrimSpace(result)
+}
+
 func enrichTorrentsCSVResults(results []SearchResult) []SearchResult {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -317,8 +343,14 @@ func enrichTorrentsCSVResults(results []SearchResult) []SearchResult {
 				return
 			}
 
-			// Otherwise try to search by title and year
-			if omdb, err := searchOMDB(r.Title, r.Year); err == nil && omdb != nil {
+			// For TV shows, extract the show name for better OMDB matching
+			searchTitle := r.Title
+			if looksLikeTVShow(r.Title) {
+				searchTitle = extractShowName(r.Title)
+			}
+
+			// Try to search by title and year
+			if omdb, err := searchOMDB(searchTitle, r.Year); err == nil && omdb != nil {
 				mu.Lock()
 				r.OMDB = omdb
 				r.IMDBCode = omdb.IMDBID
@@ -341,29 +373,69 @@ func searchOMDB(title string, year int) (*OMDBMovie, error) {
 		return nil, nil
 	}
 
+	// First try without type restriction (OMDB will return best match)
+	result := searchOMDBWithType(title, year, "")
+	if result != nil {
+		return result, nil
+	}
+
+	// If no result and title looks like a TV show, try searching as series
+	if looksLikeTVShow(title) {
+		return searchOMDBWithType(title, year, "series"), nil
+	}
+
+	return nil, nil
+}
+
+func searchOMDBWithType(title string, year int, mediaType string) *OMDBMovie {
 	params := url.Values{}
 	params.Set("t", title)
 	params.Set("apikey", omdbAPIKey)
 	if year > 0 {
 		params.Set("y", strconv.Itoa(year))
 	}
+	if mediaType != "" {
+		params.Set("type", mediaType)
+	}
 
 	resp, err := httpClient.Get("http://www.omdbapi.com/?" + params.Encode())
 	if err != nil {
-		return nil, err
+		return nil
 	}
 	defer resp.Body.Close()
 
 	var movie OMDBMovie
 	if err := json.NewDecoder(resp.Body).Decode(&movie); err != nil {
-		return nil, err
+		return nil
 	}
 
 	if movie.Response == "False" {
-		return nil, nil
+		return nil
 	}
 
-	return &movie, nil
+	return &movie
+}
+
+// looksLikeTVShow checks if a torrent name suggests it's a TV show
+func looksLikeTVShow(name string) bool {
+	lower := strings.ToLower(name)
+	// Common TV show patterns
+	patterns := []string{
+		`s\d{1,2}e\d{1,2}`,     // S01E01
+		`s\d{1,2}`,              // S01 (full season)
+		`season\s*\d`,           // Season 1
+		`episode\s*\d`,          // Episode 1
+		`\d{1,2}x\d{1,2}`,       // 1x01
+		`complete\s*series`,
+		`complete\s*season`,
+		`all\s*seasons`,
+	}
+	for _, p := range patterns {
+		if matched, _ := regexp.MatchString(p, lower); matched {
+			return true
+		}
+	}
+	return false
 }
 
 func handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -522,6 +594,45 @@ func buildMagnet(hash, name string) string {
 		trackerParams.WriteString(url.QueryEscape(t))
 	}
 	return fmt.Sprintf("magnet:?xt=urn:btih:%s&dn=%s%s", hash, url.QueryEscape(name), trackerParams.String())
+}
+
+// handleOMDBLookup fetches OMDB data by IMDB ID or by title search
+func handleOMDBLookup(w http.ResponseWriter, r *http.Request) {
+	imdbID := r.URL.Query().Get("i")
+	title := r.URL.Query().Get("t")
+	yearStr := r.URL.Query().Get("y")
+	
+	var omdb *OMDBMovie
+	var err error
+	
+	if imdbID != "" {
+		omdb, err = fetchOMDBInfo(imdbID)
+	} else if title != "" {
+		year := 0
+		if yearStr != "" {
+			year, _ = strconv.Atoi(yearStr)
+		}
+		// Extract show name if it looks like a TV show
+		if looksLikeTVShow(title) {
+			title = extractShowName(title)
+		}
+		omdb, err = searchOMDB(title, year)
+	} else {
+		jsonError(w, "missing 'i' (IMDB ID) or 't' (title) parameter", http.StatusBadRequest)
+		return
+	}
+	
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	if omdb == nil {
+		jsonResponse(w, map[string]interface{}{"found": false})
+		return
+	}
+	
+	jsonResponse(w, omdb)
 }
 
 func handleMagnet(w http.ResponseWriter, r *http.Request) {

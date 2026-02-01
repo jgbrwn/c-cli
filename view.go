@@ -75,6 +75,14 @@ func (m Model) viewResults() string {
 
 		for i, movie := range m.movies {
 			title := movie.Title
+			// Add TV indicator
+			isSeries := movie.OMDB != nil && movie.OMDB.Type == "series"
+			isEpisode := movie.OMDB != nil && movie.OMDB.Type == "episode"
+			if isSeries {
+				title = "📺 " + title
+			} else if isEpisode {
+				title = "📺 " + title
+			}
 			if len(title) > 36 {
 				title = title[:33] + "..."
 			}
@@ -82,6 +90,8 @@ func (m Model) viewResults() string {
 			year := ""
 			if movie.Year > 0 {
 				year = fmt.Sprintf("%d", movie.Year)
+			} else if movie.OMDB != nil && movie.OMDB.Year != "" {
+				year = movie.OMDB.Year
 			}
 
 			rating := ""
@@ -201,10 +211,26 @@ func (m Model) viewMovieDetails() string {
 		runtime = fmt.Sprintf("%d min", m.movie.Runtime)
 	}
 
+	// Determine content type
+	isSeries := omdb != nil && omdb.Type == "series"
+	isEpisode := omdb != nil && omdb.Type == "episode"
+	isTVContent := isSeries || isEpisode
+
 	// Build details content
 	var details strings.Builder
 	details.WriteString(lipgloss.NewStyle().Bold(true).Render(m.movie.Title))
-	details.WriteString(fmt.Sprintf(" (%d)\n\n", m.movie.Year))
+	if m.movie.Year > 0 {
+		details.WriteString(fmt.Sprintf(" (%d)", m.movie.Year))
+	} else if omdb != nil && omdb.Year != "" {
+		details.WriteString(fmt.Sprintf(" (%s)", omdb.Year))
+	}
+	// Show type indicator for TV content
+	if isSeries {
+		details.WriteString(" 📺 TV Series")
+	} else if isEpisode {
+		details.WriteString(" 📺 Episode")
+	}
+	details.WriteString("\n\n")
 
 	if rating != "" {
 		details.WriteString(fmt.Sprintf("⭐ Rating: %s", rating))
@@ -214,7 +240,14 @@ func (m Model) viewMovieDetails() string {
 		details.WriteString("\n")
 	}
 	if runtime != "" {
-		details.WriteString(fmt.Sprintf("⏱ Runtime: %s\n", runtime))
+		if isTVContent {
+			details.WriteString(fmt.Sprintf("⏱ Episode Runtime: %s\n", runtime))
+		} else {
+			details.WriteString(fmt.Sprintf("⏱ Runtime: %s\n", runtime))
+		}
+	}
+	if omdb != nil && omdb.TotalSeasons != "" && omdb.TotalSeasons != "N/A" {
+		details.WriteString(fmt.Sprintf("📅 Seasons: %s\n", omdb.TotalSeasons))
 	}
 	if omdb != nil && omdb.Rated != "" && omdb.Rated != "N/A" {
 		details.WriteString(fmt.Sprintf("🎫 Rated: %s\n", omdb.Rated))
@@ -222,7 +255,10 @@ func (m Model) viewMovieDetails() string {
 	if genres != "" {
 		details.WriteString(fmt.Sprintf("🎭 Genres: %s\n", genres))
 	}
-	if omdb != nil && omdb.Director != "" && omdb.Director != "N/A" {
+	// For TV shows, show Writer/Creator instead of Director
+	if isTVContent && omdb != nil && omdb.Writer != "" && omdb.Writer != "N/A" {
+		details.WriteString(fmt.Sprintf("✍️ Creator: %s\n", omdb.Writer))
+	} else if !isTVContent && omdb != nil && omdb.Director != "" && omdb.Director != "N/A" {
 		details.WriteString(fmt.Sprintf("🎬 Director: %s\n", omdb.Director))
 	}
 	if omdb != nil && omdb.Actors != "" && omdb.Actors != "N/A" {
@@ -231,7 +267,12 @@ func (m Model) viewMovieDetails() string {
 	details.WriteString(fmt.Sprintf("\n%s", description))
 
 	detailsBox := boxStyle.Render(details.String())
-	b.WriteString(headerStyle.Render("🎬 Movie Details") + "\n")
+	// Use different header for TV content
+	header := "🎬 Movie Details"
+	if isTVContent {
+		header = "📺 TV Show Details"
+	}
+	b.WriteString(headerStyle.Render(header) + "\n")
 	b.WriteString(detailsBox + "\n\n")
 
 	// Torrents table

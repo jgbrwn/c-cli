@@ -1,6 +1,6 @@
-# 🎬 C-CLI - Movie Browser
+# 🎬 C-CLI - Movie & TV Show Browser
 
-A Go application for browsing and downloading movies from YTS. Available as both a **terminal UI (TUI)** and a **web app**.
+A Go application for browsing and downloading movies and TV shows. Available as both a **terminal UI (TUI)** and a **web app**.
 
 Inspired by [cinecli](https://github.com/eyeblech/cinecli) by [@eyeblech](https://github.com/eyeblech).
 
@@ -9,7 +9,8 @@ Inspired by [cinecli](https://github.com/eyeblech/cinecli) by [@eyeblech](https:
 - 🔍 **Multiple search sources:**
   - **YTS** - High quality movie torrents
   - **Torrents-CSV** - General torrents (movies, TV shows, and more)
-- 🎥 View detailed movie information (enriched with IMDB data via OMDB)
+- 🎬📺 View detailed movie & TV show information (enriched with IMDB data via OMDB)
+- 📺 **TV Show Support** - Automatic detection of TV series with season counts, episode runtimes, creators
 - 📊 Search results sorted by IMDB popularity
 - 🧲 Generate magnet links
 - 📦 Download `.torrent` files
@@ -71,7 +72,8 @@ search_source = "yts"           # "yts" or "torrents-csv"
 
 With OMDB enabled:
 - Search results sorted by IMDB popularity (vote count)
-- Full movie details: rating, runtime, director, cast, plot
+- Full movie/TV show details: rating, runtime, director/creator, cast, plot
+- TV shows display season count and episode runtime
 - IMDB ratings instead of YTS ratings
 
 Search sources:
@@ -82,7 +84,7 @@ Search sources:
 
 ## 🌐 Web Version
 
-Web-based interface with OMDB/IMDB integration for rich movie metadata.
+Web-based interface with OMDB/IMDB integration for rich movie and TV show metadata.
 
 ![Screenshot](screenshot.png)
 
@@ -104,8 +106,14 @@ Then open http://localhost:8000
 ### Features
 
 - 🔍 **Multiple search sources:** YTS (movies) or Torrents-CSV (all)
-- 🎬 Movie posters in search results and details
-- ⭐ IMDB ratings, runtime, genres, director, cast
+- 🎬📺 Movie and TV show posters in search results and details
+- 📺 **TV Show Support:**
+  - Automatic detection of TV series vs movies
+  - Season count display
+  - Episode runtime
+  - Creator information (instead of director)
+  - Series type badges in search results
+- ⭐ IMDB ratings, runtime, genres, director/creator, cast
 - 📊 Results sorted by IMDB popularity
 - 📝 Full plot descriptions
 - 🧲 Magnet links with copy to clipboard
@@ -133,6 +141,7 @@ See [c-cli-web/README.md](./c-cli-web/README.md) for full documentation.
 - **Bubble Tea** - TUI framework
 - **Lip Gloss** - TUI styling  
 - **YTS API** - Movie/torrent data
+- **Torrents-CSV API** - General torrent search
 - **OMDB API** - IMDB metadata (optional, both versions)
 
 ## 📄 License

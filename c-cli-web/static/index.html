@@ -95,6 +95,9 @@
     .movie-info h3 { margin: 0 0 4px 0; color: #fff; font-size: 16px; }
     .movie-info span { color: #888; font-size: 14px; }
     .movie-rating { color: #ffd700; font-weight: bold; flex-shrink: 0; }
+    .type-tag { font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+    .type-tag.series { background: #3498db; color: white; }
+    .type-tag.episode { background: #9b59b6; color: white; }
     
     .movie-details {
       background: #16213e;
@@ -237,16 +240,22 @@
           `).join('') + '</div>';
         } else {
           // Torrents-CSV format
-          content.innerHTML = '<div class="movies">' + movies.map(m => `
+          content.innerHTML = '<div class="movies">' + movies.map(m => {
+            const isSeries = m.omdb?.Type === 'series';
+            const isEpisode = m.omdb?.Type === 'episode';
+            const isTVContent = isSeries || isEpisode;
+            const placeholder = isTVContent ? '📺' : '🎬';
+            const typeTag = isSeries ? '<span class="type-tag series">📺 Series</span>' : (isEpisode ? '<span class="type-tag episode">📺 Episode</span>' : '');
+            return `
             <div class="movie" onclick="showTorrent('${m.id}', '${escapeJs(m.title)}', '${m.size}', ${m.seeders}, ${m.leechers}, '${m.imdb_code || ''}')">
-              ${m.omdb?.Poster && m.omdb.Poster !== 'N/A' ? `<img class="movie-thumb" src="${m.omdb.Poster}" alt="">` : '<div class="movie-thumb-placeholder">🎬</div>'}
+              ${m.omdb?.Poster && m.omdb.Poster !== 'N/A' ? `<img class="movie-thumb" src="${m.omdb.Poster}" alt="">` : `<div class="movie-thumb-placeholder">${placeholder}</div>`}
               <div class="movie-info">
-                <h3>${escapeHtml(m.title)}</h3>
-                <span>${m.year || ''} • ${m.size} • ⬆${m.seeders} ⬇${m.leechers}</span>
+                <h3>${escapeHtml(m.title)} ${typeTag}</h3>
+                <span>${m.year || ''} • ${m.size} • ⬆${m.seeders} ⬇${m.leechers}${m.omdb?.totalSeasons ? ` • ${m.omdb.totalSeasons} seasons` : ''}</span>
               </div>
               ${m.omdb?.imdbRating && m.omdb.imdbRating !== 'N/A' ? `<div class="movie-rating">⭐ ${m.omdb.imdbRating}</div>` : ''}
             </div>
-          `).join('') + '</div>';
+          `}).join('') + '</div>';
         }
       } catch (err) {
         content.innerHTML = `<div class="error">Error: ${err.message}</div>`;
@@ -408,25 +417,76 @@
       return (text || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     }
     
-    function showTorrent(infohash, title, size, seeders, leechers, imdbCode) {
-      const magnet = `magnet:?xt=urn:btih:${infohash}&dn=${encodeURIComponent(title)}&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80/announce&tr=udp://tracker.opentrackr.org:1337/announce`;
+    async function showTorrent(infohash, title, size, seeders, leechers, imdbCode) {
+      content.innerHTML = '<div class="loading">Loading details...</div>';
+      
+      // Fetch OMDB data
+      let omdb = null;
+      try {
+        let omdbUrl = imdbCode 
+          ? `/api/omdb?i=${encodeURIComponent(imdbCode)}`
+          : `/api/omdb?t=${encodeURIComponent(title)}`;
+        const resp = await fetch(omdbUrl);
+        const data = await resp.json();
+        if (data && data.Title) {
+          omdb = data;
+          if (!imdbCode && data.imdbID) {
+            imdbCode = data.imdbID;
+          }
+        }
+      } catch (e) {
+        console.log('OMDB lookup failed:', e);
+      }
+      
+      // Determine if it's a TV show
+      const isSeries = omdb?.Type === 'series';
+      const isEpisode = omdb?.Type === 'episode';
+      const isTVContent = isSeries || isEpisode;
+      
+      // Build metadata display
+      const rating = omdb?.imdbRating && omdb.imdbRating !== 'N/A' ? omdb.imdbRating : null;
+      const runtime = omdb?.Runtime && omdb.Runtime !== 'N/A' ? omdb.Runtime : null;
+      const rated = omdb?.Rated && omdb.Rated !== 'N/A' ? omdb.Rated : null;
+      const genres = omdb?.Genre && omdb.Genre !== 'N/A' ? omdb.Genre : null;
+      const year = omdb?.Year || null;
+      const totalSeasons = omdb?.totalSeasons || null;
+      const director = omdb?.Director && omdb.Director !== 'N/A' ? omdb.Director : null;
+      const writer = omdb?.Writer && omdb.Writer !== 'N/A' ? omdb.Writer : null;
+      const actors = omdb?.Actors && omdb.Actors !== 'N/A' ? omdb.Actors : null;
+      const plot = omdb?.Plot && omdb.Plot !== 'N/A' ? omdb.Plot : null;
+      const poster = omdb?.Poster && omdb.Poster !== 'N/A' ? omdb.Poster : null;
+      
+      // Type badge
+      const typeBadge = isSeries ? '📺 TV Series' : (isEpisode ? '📺 Episode' : '🎬 Movie');
       
       content.innerHTML = `
         <button class="back-btn" onclick="search()">← Back to results</button>
         <div class="movie-details">
-          <h2>${escapeHtml(title)}</h2>
-          <div class="movie-meta">
-            <span>💾 ${size}</span>
-            <span>⬆ ${seeders} seeds</span>
-            <span>⬇ ${leechers} peers</span>
+          <div class="movie-header">
+            ${poster ? `<a href="https://www.imdb.com/title/${imdbCode}" target="_blank" rel="noopener" title="View on IMDB"><img class="movie-poster" src="${poster}" alt="${escapeHtml(omdb?.Title || title)}"></a>` : ''}
+            <div class="movie-info-main">
+              <h2>${escapeHtml(omdb?.Title || title)}${year ? ` (${year})` : ''}</h2>
+              <div class="movie-meta">
+                <span>${typeBadge}</span>
+                ${rating ? `<span>⭐ ${rating}</span>` : ''}
+                ${runtime ? `<span>⏱ ${runtime}</span>` : ''}
+                ${rated ? `<span>🎫 ${rated}</span>` : ''}
+                ${totalSeasons ? `<span>📅 ${totalSeasons} seasons</span>` : ''}
+              </div>
+              ${genres ? `<div class="movie-genres">🎭 ${genres}</div>` : ''}
+              ${isTVContent && writer ? `<div class="movie-crew">✍️ Creator: ${escapeHtml(writer)}</div>` : ''}
+              ${!isTVContent && director ? `<div class="movie-crew">🎬 Director: ${escapeHtml(director)}</div>` : ''}
+              ${actors ? `<div class="movie-crew">🎭 Cast: ${escapeHtml(actors)}</div>` : ''}
+              ${imdbCode ? `<div class="movie-crew"><a href="https://www.imdb.com/title/${imdbCode}" target="_blank" style="color: #e94560;">🔗 View on IMDB</a></div>` : ''}
+            </div>
           </div>
-          ${imdbCode ? `<div class="movie-meta"><a href="https://www.imdb.com/title/${imdbCode}" target="_blank" style="color: #e94560;">🎬 View on IMDB</a></div>` : ''}
+          ${plot ? `<div class="movie-desc">${escapeHtml(plot)}</div>` : ''}
           <div class="torrents">
             <h3>🧲 Download Options</h3>
             <div class="torrent" id="torrent-0">
               <div class="torrent-info">
                 <span class="quality">Full</span>
-                <span>${size}</span>
+                <span>💾 ${size}</span>
                 <span class="seeds">⬆ ${seeders}</span>
                 <span class="peers">⬇ ${leechers}</span>
               </div>

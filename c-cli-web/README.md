@@ -1,6 +1,6 @@
 # 🎬 CineCLI Web
 
-A web interface for browsing and downloading movies from YTS, with IMDB metadata enrichment.
+A web interface for browsing and downloading movies and TV shows, with IMDB metadata enrichment.
 
 ![Screenshot](screenshot.png)
 
@@ -9,7 +9,12 @@ A web interface for browsing and downloading movies from YTS, with IMDB metadata
 - 🔍 **Multiple search sources:**
   - **YTS** - High quality movie torrents
   - **Torrents-CSV** - General torrents (movies, TV shows, and more)
-- 🎥 View movie details with posters, ratings, cast, and plot (via OMDB/IMDB)
+- 🎬📺 View movie & TV show details with posters, ratings, cast, and plot (via OMDB/IMDB)
+- 📺 **TV Show Support:**
+  - Automatic detection of TV series vs movies
+  - Season count and episode runtime display
+  - Creator information for series
+  - Type badges (📺 Series) in search results
 - 📊 Search results sorted by IMDB popularity
 - 🧲 Generate magnet links (with copy to clipboard)
 - ⬇ Download `.torrent` files to server
@@ -46,6 +51,8 @@ With OMDB enabled:
 - Search results sorted by IMDB popularity (vote count)
 - Returns up to 50 results (default)
 - Full movie details: rating, runtime, director, cast, plot
+- Full TV show details: rating, seasons, episode runtime, creator, cast, plot
+- Type detection (movie vs series vs episode)
 
 ### Example
 
@@ -58,8 +65,9 @@ PORT=3000 DOWNLOAD_DIR=/data/torrents OMDB_API_KEY=abc123 ./c-cli-web
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Web UI |
-| `GET /api/search?q=<query>&source=<yts\|torrents-csv>` | Search movies/torrents |
+| `GET /api/search?q=<query>&source=<yts\|torrents-csv>` | Search movies/TV shows/torrents |
 | `GET /api/movie/<id>` | Get movie details (with OMDB data if configured) |
+| `GET /api/omdb?i=<imdb_id>` or `?t=<title>&y=<year>` | Lookup OMDB data directly |
 | `GET /api/magnet?hash=<hash>&name=<name>` | Generate magnet link |
 | `GET /api/download?url=<url>&title=<title>&quality=<quality>` | Download .torrent to server |
 | `GET /api/download-file?url=<url>&title=<title>&quality=<quality>` | Download .torrent to browser |
@@ -70,6 +78,7 @@ PORT=3000 DOWNLOAD_DIR=/data/torrents OMDB_API_KEY=abc123 ./c-cli-web
 - **Go** - No external web frameworks (stdlib only)
 - **Embedded static files** - Single binary deployment
 - **YTS API** - Movie and torrent data
+- **Torrents-CSV API** - General torrent search
 - **OMDB API** - IMDB metadata (optional)
 
 ## 📄 License

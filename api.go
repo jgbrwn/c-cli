@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,18 +48,21 @@ type Torrent struct {
 }
 
 type OMDBMovie struct {
-	Title      string `json:"Title"`
-	Year       string `json:"Year"`
-	Rated      string `json:"Rated"`
-	Runtime    string `json:"Runtime"`
-	Genre      string `json:"Genre"`
-	Director   string `json:"Director"`
-	Actors     string `json:"Actors"`
-	Plot       string `json:"Plot"`
-	IMDBRating string `json:"imdbRating"`
-	IMDBVotes  string `json:"imdbVotes"`
-	IMDBID     string `json:"imdbID"`
-	Response   string `json:"Response"`
+	Title        string `json:"Title"`
+	Year         string `json:"Year"`
+	Rated        string `json:"Rated"`
+	Runtime      string `json:"Runtime"`
+	Genre        string `json:"Genre"`
+	Director     string `json:"Director"`
+	Writer       string `json:"Writer"`
+	Actors       string `json:"Actors"`
+	Plot         string `json:"Plot"`
+	IMDBRating   string `json:"imdbRating"`
+	IMDBVotes    string `json:"imdbVotes"`
+	IMDBID       string `json:"imdbID"`
+	Type         string `json:"Type"`         // "movie", "series", or "episode"
+	TotalSeasons string `json:"totalSeasons"` // Only for series
+	Response     string `json:"Response"`
 }
 
 type searchResponse struct {
@@ -354,7 +358,12 @@ func enrichTorrentsCSVMovies(movies []Movie) []Movie {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			if omdb, err := searchOMDB(movies[idx].Title, movies[idx].Year); err == nil && omdb != nil {
+			// For TV shows, extract the show name for better OMDB matching
+			searchTitle := movies[idx].Title
+			if looksLikeTVShow(movies[idx].Title) {
+				searchTitle = extractShowName(movies[idx].Title)
+			}
+			if omdb, err := searchOMDB(searchTitle, movies[idx].Year); err == nil && omdb != nil {
 				mu.Lock()
 				movies[idx].OMDB = omdb
 				movies[idx].IMDBCode = omdb.IMDBID
@@ -377,27 +386,86 @@ func searchOMDB(title string, year int) (*OMDBMovie, error) {
 		return nil, nil
 	}
 
+	// First try without type restriction
+	result := searchOMDBWithType(title, year, "")
+	if result != nil {
+		return result, nil
+	}
+
+	// If no result and title looks like a TV show, try searching as series
+	if looksLikeTVShow(title) {
+		return searchOMDBWithType(title, year, "series"), nil
+	}
+
+	return nil, nil
+}
+
+func searchOMDBWithType(title string, year int, mediaType string) *OMDBMovie {
 	params := url.Values{}
 	params.Set("t", title)
 	params.Set("apikey", config.OMDBAPIKey)
 	if year > 0 {
 		params.Set("y", strconv.Itoa(year))
 	}
+	if mediaType != "" {
+		params.Set("type", mediaType)
+	}
 
 	resp, err := httpClient.Get("http://www.omdbapi.com/?" + params.Encode())
 	if err != nil {
-		return nil, err
+		return nil
 	}
 	defer resp.Body.Close()
 
 	var movie OMDBMovie
 	if err := json.NewDecoder(resp.Body).Decode(&movie); err != nil {
-		return nil, err
+		return nil
 	}
 
 	if movie.Response == "False" {
-		return nil, nil
+		return nil
 	}
 
-	return &movie, nil
+	return &movie
+}
+
+// looksLikeTVShow checks if a torrent name suggests it's a TV show
+func looksLikeTVShow(name string) bool {
+	lower := strings.ToLower(name)
+	patterns := []string{
+		`s\d{1,2}e\d{1,2}`,     // S01E01
+		`s\d{1,2}`,              // S01 (full season)
+		`season\s*\d`,           // Season 1
+		`episode\s*\d`,          // Episode 1
+		`\d{1,2}x\d{1,2}`,       // 1x01
+		`complete\s*series`,
+		`complete\s*season`,
+		`all\s*seasons`,
+	}
+	for _, p := range patterns {
+		if matched, _ := regexp.MatchString(p, lower); matched {
+			return true
+		}
+	}
+	return false
+}
+
+// extractShowName extracts the show/movie name from a torrent title
+func extractShowName(title string) string {
+	patterns := []string{
+		`(?i)\s*s\d{1,2}e\d{1,2}.*$`,
+		`(?i)\s*s\d{1,2}\s*$`,
+		`(?i)\s*season\s*\d+.*$`,
+		`(?i)\s*\d{1,2}x\d{1,2}.*$`,
+		`(?i)\s*complete\s*(series|season).*$`,
+		`(?i)\s*all\s*seasons.*$`,
+	}
+	
+	result := title
+	for _, p := range patterns {
+		re := regexp.MustCompile(p)
+		result = re.ReplaceAllString(result, "")
+	}
+	
+	return strings.TrimSpace(result)
 }

@@ -179,6 +179,26 @@
       margin-top: 8px;
     }
     
+    /* Status messages */
+    .status-msg {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .status-msg.loading {
+      background: #2c3e50;
+      color: #f39c12;
+    }
+    .status-msg.success {
+      background: #1e4620;
+      color: #4ade80;
+    }
+    .status-msg.error {
+      background: #4a1515;
+      color: #f87171;
+    }
+    
     /* Pagination styles */
     .pagination-info {
       color: #888;
@@ -516,14 +536,72 @@
       document.body.removeChild(link);
     }
     
-    function downloadTorrentToClient(infohash, title) {
-      // Download .torrent file from server (which fetches from cache services)
-      const link = document.createElement('a');
-      link.href = `/api/download-torrent?infohash=${encodeURIComponent(infohash)}&title=${encodeURIComponent(title)}`;
-      link.download = '';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    async function downloadTorrentToClient(infohash, title) {
+      const btn = event.target;
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.textContent = 'Fetching...';
+      
+      const container = document.getElementById('torrent-0');
+      
+      // Remove any existing status messages
+      const existingStatus = container?.querySelector('.status-msg');
+      if (existingStatus) existingStatus.remove();
+      
+      // Show loading status
+      let statusDiv = null;
+      if (container) {
+        statusDiv = document.createElement('div');
+        statusDiv.className = 'status-msg loading';
+        statusDiv.innerHTML = '⏳ Fetching .torrent from cache services...';
+        container.appendChild(statusDiv);
+      }
+      
+      try {
+        const resp = await fetch(`/api/download-torrent?infohash=${encodeURIComponent(infohash)}&title=${encodeURIComponent(title)}`);
+        
+        if (!resp.ok) {
+          throw new Error('Failed to fetch torrent');
+        }
+        
+        // Get filename from Content-Disposition header
+        const disposition = resp.headers.get('Content-Disposition');
+        let filename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}.torrent`;
+        if (disposition) {
+          const match = disposition.match(/filename="(.+)"/);
+          if (match) filename = match[1];
+        }
+        
+        // Determine file type from Content-Type
+        const contentType = resp.headers.get('Content-Type');
+        const isTorrent = contentType?.includes('bittorrent');
+        
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        btn.textContent = '✓ Saved';
+        btn.style.background = '#44aa44';
+        
+        if (statusDiv) {
+          const fileType = isTorrent ? '.torrent file' : '.magnet file (cache unavailable)';
+          statusDiv.className = 'status-msg success';
+          statusDiv.textContent = `✓ Downloaded ${fileType}`;
+        }
+      } catch (err) {
+        if (statusDiv) {
+          statusDiv.className = 'status-msg error';
+          statusDiv.textContent = `Error: ${err.message}`;
+        }
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
     }
     
     function escapeHtml(text) {
@@ -641,16 +719,25 @@
       btn.disabled = true;
       btn.textContent = 'Saving...';
       
-      // For torrents-csv, we don't have a .torrent URL, so we'll save the magnet info
-      const magnet = `magnet:?xt=urn:btih:${infohash}&dn=${encodeURIComponent(title)}`;
+      const container = document.getElementById(`torrent-${idx}`);
       
-      // Create a simple .magnet file on the server
+      // Remove any existing status messages
+      const existingStatus = container.querySelector('.status-msg');
+      if (existingStatus) existingStatus.remove();
+      
+      // Show loading status
+      const statusDiv = document.createElement('div');
+      statusDiv.className = 'status-msg loading';
+      statusDiv.innerHTML = '⏳ Fetching .torrent from cache services...';
+      container.appendChild(statusDiv);
+      
       try {
         const resp = await fetch(`/api/save-magnet?infohash=${infohash}&title=${encodeURIComponent(title)}`);
         const data = await resp.json();
         
         if (data.error) {
-          alert('Error: ' + data.error);
+          statusDiv.className = 'status-msg error';
+          statusDiv.textContent = `Error: ${data.error}`;
           btn.textContent = '⬇ Server';
           btn.disabled = false;
           return;
@@ -659,13 +746,13 @@
         btn.textContent = '✓ Saved';
         btn.style.background = '#44aa44';
         
-        const container = document.getElementById(`torrent-${idx}`);
-        const successDiv = document.createElement('div');
-        successDiv.className = 'success';
-        successDiv.textContent = `Saved: ${data.filepath}`;
-        container.appendChild(successDiv);
+        // Show success with file type info
+        const fileType = data.type === 'torrent' ? '.torrent file' : '.magnet file (cache unavailable)';
+        statusDiv.className = 'status-msg success';
+        statusDiv.textContent = `✓ Saved ${fileType}: ${data.filepath}`;
       } catch (err) {
-        alert('Error: ' + err.message);
+        statusDiv.className = 'status-msg error';
+        statusDiv.textContent = `Error: ${err.message}`;
         btn.textContent = '⬇ Server';
         btn.disabled = false;
       }

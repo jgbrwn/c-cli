@@ -82,19 +82,20 @@ type torrentDownloadedMsg struct {
 
 // Model
 type Model struct {
-	state       viewState
-	textInput   textinput.Model
-	spinner     spinner.Model
-	movies      []Movie
-	selected    int
-	movie       *Movie
-	torrents    []Torrent
-	torrentIdx  int
-	err         error
-	message     string
-	magnetLink  string
-	width       int
-	height      int
+	state        viewState
+	textInput    textinput.Model
+	spinner      spinner.Model
+	movies       []Movie
+	selected     int
+	movie        *Movie
+	torrents     []Torrent
+	torrentIdx   int
+	err          error
+	message      string
+	magnetLink   string
+	width        int
+	height       int
+	searchSource SearchSource
 }
 
 func NewModel() Model {
@@ -108,12 +109,19 @@ func NewModel() Model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
+	// Default source from config or env
+	source := SourceYTS
+	if config.SearchSource == "torrents-csv" {
+		source = SourceTorrentsCSV
+	}
+
 	return Model{
-		state:     viewSearch,
-		textInput: ti,
-		spinner:   s,
-		width:     80,
-		height:    24,
+		state:        viewSearch,
+		textInput:    ti,
+		spinner:      s,
+		width:        80,
+		height:       24,
+		searchSource: source,
 	}
 }
 
@@ -201,6 +209,14 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			return m.handleEnter()
+		case "tab":
+			// Toggle search source
+			if m.searchSource == SourceYTS {
+				m.searchSource = SourceTorrentsCSV
+			} else {
+				m.searchSource = SourceYTS
+			}
+			return m, nil
 		default:
 			// Pass all other keys to text input
 			var cmd tea.Cmd
@@ -349,8 +365,18 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		if len(m.movies) == 0 {
 			return m, nil
 		}
+		selectedMovie := m.movies[m.selected]
+		if selectedMovie.Source == SourceTorrentsCSV {
+			// For torrents-csv, we already have all the info
+			m.movie = &selectedMovie
+			m.torrents = selectedMovie.Torrents
+			m.torrentIdx = 0
+			m.state = viewDetails
+			return m, nil
+		}
+		// For YTS, fetch full details
 		m.state = viewLoading
-		return m, tea.Batch(m.spinner.Tick, m.fetchMovieDetails(m.movies[m.selected].ID))
+		return m, tea.Batch(m.spinner.Tick, m.fetchMovieDetails(selectedMovie.ID))
 
 	case viewDetails, viewTorrents:
 		// Show magnet link for selected torrent
@@ -368,7 +394,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 
 func (m Model) searchMovies(query string) tea.Cmd {
 	return func() tea.Msg {
-		movies, err := SearchMovies(query, 20)
+		movies, err := SearchMovies(query, config.SearchLimit, m.searchSource)
 		return searchResultMsg{movies: movies, err: err}
 	}
 }

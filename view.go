@@ -41,9 +41,14 @@ func (m Model) View() string {
 }
 
 func (m Model) viewSearch() string {
+	sourceLabel := "YTS (Movies)"
+	if m.searchSource == SourceTorrentsCSV {
+		sourceLabel = "Torrents-CSV (All)"
+	}
 	return fmt.Sprintf(
-		"%s\n\n> %s",
-		headerStyle.Render("🔍 Search for movies:"),
+		"%s\n\n⏺ Source: %s\n\n> %s",
+		headerStyle.Render("🔍 Search for movies or TV shows:"),
+		selectedStyle.Render(sourceLabel),
 		m.textInput.View(),
 	)
 }
@@ -56,49 +61,96 @@ func (m Model) viewResults() string {
 	var b strings.Builder
 	b.WriteString(headerStyle.Render("🎬 Search Results") + "\n\n")
 
-	// Table header
-	headerRow := fmt.Sprintf("  %-40s %-6s %-8s %s",
-		dimStyle.Render("Title"),
-		dimStyle.Render("Year"),
-		dimStyle.Render("Rating"),
-		dimStyle.Render("Votes"),
-	)
-	b.WriteString(headerRow + "\n")
-	b.WriteString(dimStyle.Render(strings.Repeat("─", 70)) + "\n")
-
-	for i, movie := range m.movies {
-		title := movie.Title
-		if len(title) > 38 {
-			title = title[:35] + "..."
-		}
-
-		// Use OMDB rating if available, otherwise YTS
-		rating := ""
-		if movie.OMDB != nil && movie.OMDB.IMDBRating != "" && movie.OMDB.IMDBRating != "N/A" {
-			rating = ratingStyle.Render(fmt.Sprintf("⭐ %s", movie.OMDB.IMDBRating))
-		} else if movie.Rating > 0 {
-			rating = ratingStyle.Render(fmt.Sprintf("⭐ %.1f", movie.Rating))
-		} else {
-			rating = dimStyle.Render("  -  ")
-		}
-
-		// Show vote count if available
-		votes := ""
-		if movie.OMDB != nil && movie.OMDB.IMDBVotes != "" && movie.OMDB.IMDBVotes != "N/A" {
-			votes = dimStyle.Render(movie.OMDB.IMDBVotes)
-		}
-
-		row := fmt.Sprintf("%-40s %-6d %-8s %s",
-			title,
-			movie.Year,
-			rating,
-			votes,
+	if len(m.movies) > 0 && m.movies[0].Source == SourceTorrentsCSV {
+		// Torrents-CSV format
+		headerRow := fmt.Sprintf("  %-38s %-6s %-10s %-6s %s",
+			dimStyle.Render("Title"),
+			dimStyle.Render("Year"),
+			dimStyle.Render("Size"),
+			dimStyle.Render("Seeds"),
+			dimStyle.Render("Rating"),
 		)
+		b.WriteString(headerRow + "\n")
+		b.WriteString(dimStyle.Render(strings.Repeat("─", 75)) + "\n")
 
-		if i == m.selected {
-			b.WriteString(selectedStyle.Render("▶ "+row) + "\n")
-		} else {
-			b.WriteString(normalStyle.Render("  "+row) + "\n")
+		for i, movie := range m.movies {
+			title := movie.Title
+			if len(title) > 36 {
+				title = title[:33] + "..."
+			}
+
+			year := ""
+			if movie.Year > 0 {
+				year = fmt.Sprintf("%d", movie.Year)
+			}
+
+			rating := ""
+			if movie.OMDB != nil && movie.OMDB.IMDBRating != "" && movie.OMDB.IMDBRating != "N/A" {
+				rating = ratingStyle.Render(fmt.Sprintf("⭐ %s", movie.OMDB.IMDBRating))
+			}
+
+			seedsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+			if movie.Seeders < 10 {
+				seedsStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+			}
+
+			row := fmt.Sprintf("%-38s %-6s %-10s %s %s",
+				title,
+				year,
+				movie.Size,
+				seedsStyle.Render(fmt.Sprintf("%-6d", movie.Seeders)),
+				rating,
+			)
+
+			if i == m.selected {
+				b.WriteString(selectedStyle.Render("▶ "+row) + "\n")
+			} else {
+				b.WriteString(normalStyle.Render("  "+row) + "\n")
+			}
+		}
+	} else {
+		// YTS format
+		headerRow := fmt.Sprintf("  %-40s %-6s %-8s %s",
+			dimStyle.Render("Title"),
+			dimStyle.Render("Year"),
+			dimStyle.Render("Rating"),
+			dimStyle.Render("Votes"),
+		)
+		b.WriteString(headerRow + "\n")
+		b.WriteString(dimStyle.Render(strings.Repeat("─", 70)) + "\n")
+
+		for i, movie := range m.movies {
+			title := movie.Title
+			if len(title) > 38 {
+				title = title[:35] + "..."
+			}
+
+			rating := ""
+			if movie.OMDB != nil && movie.OMDB.IMDBRating != "" && movie.OMDB.IMDBRating != "N/A" {
+				rating = ratingStyle.Render(fmt.Sprintf("⭐ %s", movie.OMDB.IMDBRating))
+			} else if movie.Rating > 0 {
+				rating = ratingStyle.Render(fmt.Sprintf("⭐ %.1f", movie.Rating))
+			} else {
+				rating = dimStyle.Render("  -  ")
+			}
+
+			votes := ""
+			if movie.OMDB != nil && movie.OMDB.IMDBVotes != "" && movie.OMDB.IMDBVotes != "N/A" {
+				votes = dimStyle.Render(movie.OMDB.IMDBVotes)
+			}
+
+			row := fmt.Sprintf("%-40s %-6d %-8s %s",
+				title,
+				movie.Year,
+				rating,
+				votes,
+			)
+
+			if i == m.selected {
+				b.WriteString(selectedStyle.Render("▶ "+row) + "\n")
+			} else {
+				b.WriteString(normalStyle.Render("  "+row) + "\n")
+			}
 		}
 	}
 
@@ -252,7 +304,7 @@ func (m Model) viewHelp() string {
 
 	switch m.state {
 	case viewSearch:
-		help = "enter: search • ctrl+c: quit"
+		help = "enter: search • tab: switch source • ctrl+c: quit"
 	case viewLoading:
 		help = "loading..."
 	case viewResults:

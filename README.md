@@ -6,8 +6,11 @@ Inspired by [cinecli](https://github.com/eyeblech/cinecli) by [@eyeblech](https:
 
 ## ✨ Features
 
-- 🔍 Search movies from YTS
-- 🎥 View detailed movie information
+- 🔍 **Multiple search sources:**
+  - **YTS** - High quality movie torrents
+  - **Torrents-CSV** - General torrents (movies, TV shows, and more)
+- 🎥 View detailed movie information (enriched with IMDB data via OMDB)
+- 📊 Search results sorted by IMDB popularity
 - 🧲 Generate magnet links
 - 📦 Download `.torrent` files
 - ⚡ Auto-select best torrent (highest quality + healthy seeds)
@@ -48,7 +51,7 @@ OMDB_API_KEY=your_key ./c-cli
 | `↑`/`↓` or `j`/`k` | Navigate lists |
 | `Enter` | Select / Show magnet link |
 | `0-9` | Select torrent by index |
-| `Tab` | Switch sections |
+| `Tab` | Switch source (search) / Switch sections |
 | `Esc` | Go back |
 | `a` | Auto-select best torrent |
 | `m` | Show magnet link |
@@ -63,12 +66,17 @@ Create `~/.config/c-cli/config.toml`:
 search_limit = 50
 download_dir = "~/Downloads"
 omdb_api_key = "your_key_here"  # Optional, or use OMDB_API_KEY env var
+search_source = "yts"           # "yts" or "torrents-csv"
 ```
 
 With OMDB enabled:
 - Search results sorted by IMDB popularity (vote count)
 - Full movie details: rating, runtime, director, cast, plot
 - IMDB ratings instead of YTS ratings
+
+Search sources:
+- **yts** - High quality movie torrents (default)
+- **torrents-csv** - General torrents including TV shows
 
 ---
 
@@ -95,8 +103,10 @@ Then open http://localhost:8000
 
 ### Features
 
+- 🔍 **Multiple search sources:** YTS (movies) or Torrents-CSV (all)
 - 🎬 Movie posters in search results and details
 - ⭐ IMDB ratings, runtime, genres, director, cast
+- 📊 Results sorted by IMDB popularity
 - 📝 Full plot descriptions
 - 🧲 Magnet links with copy to clipboard
 - ⬇ Download `.torrent` to server

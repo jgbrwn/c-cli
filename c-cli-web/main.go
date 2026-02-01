@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,7 +21,10 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
-const baseURL = "https://yts.bz/api/v2"
+const (
+	ytsBaseURL     = "https://yts.bz/api/v2"
+	torrentsCSVURL = "https://torrents-csv.com/service/search"
+)
 
 var httpClient = &http.Client{Timeout: 15 * time.Second}
 var downloadDir string
@@ -44,6 +48,7 @@ func main() {
 	http.HandleFunc("/api/magnet", handleMagnet)
 	http.HandleFunc("/api/download", handleDownloadToServer)
 	http.HandleFunc("/api/download-file", handleDownloadToClient)
+	http.HandleFunc("/api/save-magnet", handleSaveMagnet)
 
 	omdbAPIKey = os.Getenv("OMDB_API_KEY")
 
@@ -111,6 +116,38 @@ type detailResponse struct {
 	Data   struct {
 		Movie Movie `json:"movie"`
 	} `json:"data"`
+}
+
+// TorrentsCSV types
+type TorrentsCSVResponse struct {
+	Torrents []TorrentsCSVItem `json:"torrents"`
+}
+
+type TorrentsCSVItem struct {
+	Infohash    string `json:"infohash"`
+	Name        string `json:"name"`
+	SizeBytes   int64  `json:"size_bytes"`
+	Seeders     int    `json:"seeders"`
+	Leechers    int    `json:"leechers"`
+	CreatedUnix int64  `json:"created_unix"`
+}
+
+// Generic search result for unified API
+type SearchResult struct {
+	ID        string     `json:"id"`
+	Title     string     `json:"title"`
+	Year      int        `json:"year,omitempty"`
+	Source    string     `json:"source"` // "yts" or "torrents-csv"
+	Infohash  string     `json:"infohash,omitempty"`
+	Size      string     `json:"size,omitempty"`
+	Seeders   int        `json:"seeders,omitempty"`
+	Leechers  int        `json:"leechers,omitempty"`
+	IMDBCode  string     `json:"imdb_code,omitempty"`
+	OMDB      *OMDBMovie `json:"omdb,omitempty"`
+	// YTS specific
+	SmallCover  string    `json:"small_cover_image,omitempty"`
+	MediumCover string    `json:"medium_cover_image,omitempty"`
+	Torrents    []Torrent `json:"torrents,omitempty"`
 }
 
 // OMDB types
@@ -196,6 +233,139 @@ func parseVotes(omdb *OMDBMovie) int {
 	return votes
 }
 
+func extractYearAndIMDB(name string) (int, string) {
+	year := 0
+	imdbCode := ""
+
+	// Try to extract year from patterns like (2010) or 2010
+	yearRegex := regexp.MustCompile(`[\(\[]?(19\d{2}|20\d{2})[\)\]]?`)
+	if match := yearRegex.FindString(name); match != "" {
+		match = strings.Trim(match, "()[]")
+		year, _ = strconv.Atoi(match)
+	}
+
+	// Try to extract IMDB code if present (rare in torrent names)
+	imdbRegex := regexp.MustCompile(`tt\d{7,}`)
+	if match := imdbRegex.FindString(name); match != "" {
+		imdbCode = match
+	}
+
+	return year, imdbCode
+}
+
+func cleanTorrentName(name string) string {
+	// Remove common torrent tags and clean up the name
+	cleaners := []string{
+		`\[.*?\]`,
+		`\(.*?(rip|YIFY|MX|HDR|BluRay|WEB|HDTV|DVDRip|BRRip|x264|x265|HEVC|AAC|DTS|10bit|5\.1|7\.1).*?\)`,
+		`(1080p|720p|480p|2160p|4K|HDR|HDR10|BluRay|BRRip|WEB-DL|WEBRip|HDTV|DVDRip)`,
+		`(x264|x265|HEVC|H\.?264|H\.?265|AVC)`,
+		`(AAC|DTS|AC3|FLAC|TrueHD|Atmos|5\.1|7\.1)`,
+		`(YIFY|YTS|MX|RARBG|SPARKS|FGT|EVO|GECKOS|AMZN|NF|iNTERNAL)`,
+		`\s*-\s*$`,
+		`\.mkv$|\.mp4$|\.avi$`,
+	}
+
+	result := name
+	for _, pattern := range cleaners {
+		re := regexp.MustCompile(`(?i)` + pattern)
+		result = re.ReplaceAllString(result, "")
+	}
+
+	// Replace dots and underscores with spaces
+	result = strings.ReplaceAll(result, ".", " ")
+	result = strings.ReplaceAll(result, "_", " ")
+
+	// Clean up multiple spaces
+	spaceRegex := regexp.MustCompile(`\s+`)
+	result = spaceRegex.ReplaceAllString(result, " ")
+
+	return strings.TrimSpace(result)
+}
+
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.2f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+func enrichTorrentsCSVResults(results []SearchResult) []SearchResult {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// Try to find OMDB data by searching for title+year
+	for i := range results {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			r := &results[idx]
+
+			// If we have an IMDB code, use it directly
+			if r.IMDBCode != "" {
+				if omdb, err := fetchOMDBInfo(r.IMDBCode); err == nil && omdb != nil {
+					mu.Lock()
+					r.OMDB = omdb
+					mu.Unlock()
+				}
+				return
+			}
+
+			// Otherwise try to search by title and year
+			if omdb, err := searchOMDB(r.Title, r.Year); err == nil && omdb != nil {
+				mu.Lock()
+				r.OMDB = omdb
+				r.IMDBCode = omdb.IMDBID
+				mu.Unlock()
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Sort by IMDB votes
+	sort.Slice(results, func(i, j int) bool {
+		return parseVotes(results[i].OMDB) > parseVotes(results[j].OMDB)
+	})
+
+	return results
+}
+
+func searchOMDB(title string, year int) (*OMDBMovie, error) {
+	if omdbAPIKey == "" {
+		return nil, nil
+	}
+
+	params := url.Values{}
+	params.Set("t", title)
+	params.Set("apikey", omdbAPIKey)
+	if year > 0 {
+		params.Set("y", strconv.Itoa(year))
+	}
+
+	resp, err := httpClient.Get("http://www.omdbapi.com/?" + params.Encode())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var movie OMDBMovie
+	if err := json.NewDecoder(resp.Body).Decode(&movie); err != nil {
+		return nil, err
+	}
+
+	if movie.Response == "False" {
+		return nil, nil
+	}
+
+	return &movie, nil
+}
+
 func handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -203,18 +373,34 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	source := r.URL.Query().Get("source")
+	if source == "" {
+		source = "yts" // default
+	}
+
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {
-		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 50 {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
 			limit = n
 		}
 	}
 
+	switch source {
+	case "yts":
+		handleYTSSearch(w, query, limit)
+	case "torrents-csv", "tcsv":
+		handleTorrentsCSVSearch(w, query, limit)
+	default:
+		jsonError(w, "invalid source, use 'yts' or 'torrents-csv'", http.StatusBadRequest)
+	}
+}
+
+func handleYTSSearch(w http.ResponseWriter, query string, limit int) {
 	params := url.Values{}
 	params.Set("query_term", query)
 	params.Set("limit", strconv.Itoa(limit))
 
-	resp, err := httpClient.Get(fmt.Sprintf("%s/list_movies.json?%s", baseURL, params.Encode()))
+	resp, err := httpClient.Get(fmt.Sprintf("%s/list_movies.json?%s", ytsBaseURL, params.Encode()))
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadGateway)
 		return
@@ -240,6 +426,49 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, movies)
 }
 
+func handleTorrentsCSVSearch(w http.ResponseWriter, query string, limit int) {
+	params := url.Values{}
+	params.Set("q", query)
+	params.Set("size", strconv.Itoa(limit))
+
+	resp, err := httpClient.Get(fmt.Sprintf("%s?%s", torrentsCSVURL, params.Encode()))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	var result TorrentsCSVResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to SearchResult format
+	results := make([]SearchResult, 0, len(result.Torrents))
+	for _, t := range result.Torrents {
+		year, imdbCode := extractYearAndIMDB(t.Name)
+		results = append(results, SearchResult{
+			ID:       t.Infohash,
+			Title:    cleanTorrentName(t.Name),
+			Year:     year,
+			Source:   "torrents-csv",
+			Infohash: t.Infohash,
+			Size:     formatBytes(t.SizeBytes),
+			Seeders:  t.Seeders,
+			Leechers: t.Leechers,
+			IMDBCode: imdbCode,
+		})
+	}
+
+	// Enrich with OMDB if available
+	if omdbAPIKey != "" && len(results) > 0 {
+		results = enrichTorrentsCSVResults(results)
+	}
+
+	jsonResponse(w, results)
+}
+
 func handleMovieDetails(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/movie/")
 	movieID, err := strconv.Atoi(idStr)
@@ -253,7 +482,7 @@ func handleMovieDetails(w http.ResponseWriter, r *http.Request) {
 	params.Set("with_images", "true")
 	params.Set("with_cast", "true")
 
-	resp, err := httpClient.Get(fmt.Sprintf("%s/movie_details.json?%s", baseURL, params.Encode()))
+	resp, err := httpClient.Get(fmt.Sprintf("%s/movie_details.json?%s", ytsBaseURL, params.Encode()))
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadGateway)
 		return
@@ -395,4 +624,34 @@ func jsonError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+func handleSaveMagnet(w http.ResponseWriter, r *http.Request) {
+	infohash := r.URL.Query().Get("infohash")
+	title := r.URL.Query().Get("title")
+
+	if infohash == "" {
+		jsonError(w, "missing infohash", http.StatusBadRequest)
+		return
+	}
+
+	if title == "" {
+		title = infohash
+	}
+
+	magnet := fmt.Sprintf("magnet:?xt=urn:btih:%s&dn=%s", infohash, url.QueryEscape(title))
+	for _, t := range trackers {
+		magnet += "&tr=" + url.QueryEscape(t)
+	}
+
+	safeTitle := sanitizeFilename(title)
+	filename := fmt.Sprintf("%s.magnet", safeTitle)
+	filepath := filepath.Join(downloadDir, filename)
+
+	if err := os.WriteFile(filepath, []byte(magnet), 0644); err != nil {
+		jsonError(w, fmt.Sprintf("failed to save: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"filepath": filepath, "filename": filename})
 }

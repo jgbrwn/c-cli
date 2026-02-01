@@ -24,6 +24,15 @@
       gap: 10px;
       margin-bottom: 20px;
     }
+    #sourceSelect {
+      padding: 12px;
+      font-size: 14px;
+      border: 2px solid #333;
+      border-radius: 8px;
+      background: #16213e;
+      color: #fff;
+      cursor: pointer;
+    }
     input[type="text"] {
       flex: 1;
       padding: 12px 16px;
@@ -69,6 +78,17 @@
       height: 67px;
       object-fit: cover;
       border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .movie-thumb-placeholder {
+      width: 45px;
+      height: 67px;
+      background: #0f1729;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
       flex-shrink: 0;
     }
     .movie-info { flex: 1; }
@@ -162,7 +182,11 @@
     <h1>🎬 CineCLI <span>Web</span></h1>
     
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Search for movies..." autofocus>
+      <select id="sourceSelect">
+        <option value="yts">YTS (Movies)</option>
+        <option value="torrents-csv">Torrents-CSV (All)</option>
+      </select>
+      <input type="text" id="searchInput" placeholder="Search for movies or TV shows..." autofocus>
       <button onclick="search()" id="searchBtn">Search</button>
     </div>
     
@@ -181,10 +205,11 @@
       const query = searchInput.value.trim();
       if (!query) return;
       
+      const source = document.getElementById('sourceSelect').value;
       content.innerHTML = '<div class="loading">Searching...</div>';
       
       try {
-        const resp = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const resp = await fetch(`/api/search?q=${encodeURIComponent(query)}&source=${source}`);
         const data = await resp.json();
         
         if (!resp.ok) {
@@ -199,16 +224,32 @@
         
         const movies = data;
         
-        content.innerHTML = '<div class="movies">' + movies.map(m => `
-          <div class="movie" onclick="showMovie(${m.id})">
-            ${m.small_cover_image ? `<img class="movie-thumb" src="${m.small_cover_image}" alt="">` : ''}
-            <div class="movie-info">
-              <h3>${escapeHtml(m.title)}</h3>
-              <span>${m.year}${m.runtime ? ` • ${m.runtime} min` : ''}</span>
+        const source = document.getElementById('sourceSelect').value;
+        
+        if (source === 'yts') {
+          content.innerHTML = '<div class="movies">' + movies.map(m => `
+            <div class="movie" onclick="showMovie(${m.id})">
+              ${m.small_cover_image ? `<img class="movie-thumb" src="${m.small_cover_image}" alt="">` : ''}
+              <div class="movie-info">
+                <h3>${escapeHtml(m.title)}</h3>
+                <span>${m.year || ''}${m.runtime ? ` • ${m.runtime} min` : ''}</span>
+              </div>
+              ${m.rating ? `<div class="movie-rating">⭐ ${m.rating}</div>` : ''}
             </div>
-            ${m.rating ? `<div class="movie-rating">⭐ ${m.rating}</div>` : ''}
-          </div>
-        `).join('') + '</div>';
+          `).join('') + '</div>';
+        } else {
+          // Torrents-CSV format
+          content.innerHTML = '<div class="movies">' + movies.map(m => `
+            <div class="movie" onclick="showTorrent('${m.id}', '${escapeJs(m.title)}', '${m.size}', ${m.seeders}, ${m.leechers}, '${m.imdb_code || ''}')">
+              ${m.omdb?.Poster && m.omdb.Poster !== 'N/A' ? `<img class="movie-thumb" src="${m.omdb.Poster}" alt="">` : '<div class="movie-thumb-placeholder">🎬</div>'}
+              <div class="movie-info">
+                <h3>${escapeHtml(m.title)}</h3>
+                <span>${m.year || ''} • ${m.size} • ⬆${m.seeders} ⬇${m.leechers}</span>
+              </div>
+              ${m.omdb?.imdbRating && m.omdb.imdbRating !== 'N/A' ? `<div class="movie-rating">⭐ ${m.omdb.imdbRating}</div>` : ''}
+            </div>
+          `).join('') + '</div>';
+        }
       } catch (err) {
         content.innerHTML = `<div class="error">Error: ${err.message}</div>`;
       }
@@ -367,6 +408,89 @@
     
     function escapeJs(text) {
       return (text || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+    
+    function showTorrent(infohash, title, size, seeders, leechers, imdbCode) {
+      const magnet = `magnet:?xt=urn:btih:${infohash}&dn=${encodeURIComponent(title)}&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80/announce&tr=udp://tracker.opentrackr.org:1337/announce`;
+      
+      content.innerHTML = `
+        <button class="back-btn" onclick="search()">← Back to results</button>
+        <div class="movie-details">
+          <h2>${escapeHtml(title)}</h2>
+          <div class="movie-meta">
+            <span>💾 ${size}</span>
+            <span>⬆ ${seeders} seeds</span>
+            <span>⬇ ${leechers} peers</span>
+          </div>
+          ${imdbCode ? `<div class="movie-meta"><a href="https://www.imdb.com/title/${imdbCode}" target="_blank" style="color: #e94560;">🎬 View on IMDB</a></div>` : ''}
+          <div class="torrents">
+            <h3>🧲 Download Options</h3>
+            <div class="torrent" id="torrent-0">
+              <div class="torrent-info">
+                <span class="quality">Full</span>
+                <span>${size}</span>
+                <span class="seeds">⬆ ${seeders}</span>
+                <span class="peers">⬇ ${leechers}</span>
+              </div>
+              <div class="torrent-actions">
+                <button class="btn-magnet" onclick="showMagnetDirect('${infohash}', '${escapeJs(title)}', 0)">Magnet</button>
+                <button class="btn-server" onclick="downloadToServerDirect('${infohash}', '${escapeJs(title)}', 0)">⬇ Server</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    function showMagnetDirect(infohash, title, idx) {
+      const magnet = \`magnet:?xt=urn:btih:\${infohash}&dn=\${encodeURIComponent(title)}&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80/announce&tr=udp://tracker.opentrackr.org:1337/announce\`;
+      
+      const container = document.getElementById(`torrent-${idx}`);
+      const existing = container.querySelector('.magnet-display');
+      if (existing) existing.remove();
+      
+      const magnetDiv = document.createElement('div');
+      magnetDiv.className = 'magnet-display';
+      magnetDiv.innerHTML = `
+        ${magnet}
+        <br><button class="copy-btn" onclick="copyMagnet(this, '${magnet.replace(/'/g, "\\'")}')">Copy to clipboard</button>
+      `;
+      container.appendChild(magnetDiv);
+    }
+    
+    async function downloadToServerDirect(infohash, title, idx) {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      
+      // For torrents-csv, we don't have a .torrent URL, so we'll save the magnet info
+      const magnet = `magnet:?xt=urn:btih:${infohash}&dn=${encodeURIComponent(title)}`;
+      
+      // Create a simple .magnet file on the server
+      try {
+        const resp = await fetch(`/api/save-magnet?infohash=${infohash}&title=${encodeURIComponent(title)}`);
+        const data = await resp.json();
+        
+        if (data.error) {
+          alert('Error: ' + data.error);
+          btn.textContent = '⬇ Server';
+          btn.disabled = false;
+          return;
+        }
+        
+        btn.textContent = '✓ Saved';
+        btn.style.background = '#44aa44';
+        
+        const container = document.getElementById(`torrent-${idx}`);
+        const successDiv = document.createElement('div');
+        successDiv.className = 'success';
+        successDiv.textContent = `Saved: ${data.filepath}`;
+        container.appendChild(successDiv);
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.textContent = '⬇ Server';
+        btn.disabled = false;
+      }
     }
   </script>
 </body>

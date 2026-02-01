@@ -11,6 +11,7 @@ type Config struct {
 	SearchLimit  int    `toml:"search_limit"`
 	DownloadDir  string `toml:"download_dir"`
 	OMDBAPIKey   string `toml:"omdb_api_key"`
+	SearchSource string `toml:"search_source"` // "yts" or "torrents-csv"
 }
 
 var config Config

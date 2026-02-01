@@ -6,8 +6,11 @@ A web interface for browsing and downloading movies from YTS, with IMDB metadata
 
 ## ✨ Features
 
-- 🔍 Search movies from YTS
+- 🔍 **Multiple search sources:**
+  - **YTS** - High quality movie torrents
+  - **Torrents-CSV** - General torrents (movies, TV shows, and more)
 - 🎥 View movie details with posters, ratings, cast, and plot (via OMDB/IMDB)
+- 📊 Search results sorted by IMDB popularity
 - 🧲 Generate magnet links (with copy to clipboard)
 - ⬇ Download `.torrent` files to server
 - 💾 Download `.torrent` files to your browser/computer
@@ -55,11 +58,12 @@ PORT=3000 DOWNLOAD_DIR=/data/torrents OMDB_API_KEY=abc123 ./c-cli-web
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Web UI |
-| `GET /api/search?q=<query>` | Search movies |
+| `GET /api/search?q=<query>&source=<yts\|torrents-csv>` | Search movies/torrents |
 | `GET /api/movie/<id>` | Get movie details (with OMDB data if configured) |
 | `GET /api/magnet?hash=<hash>&name=<name>` | Generate magnet link |
 | `GET /api/download?url=<url>&title=<title>&quality=<quality>` | Download .torrent to server |
 | `GET /api/download-file?url=<url>&title=<title>&quality=<quality>` | Download .torrent to browser |
+| `GET /api/save-magnet?infohash=<hash>&title=<title>` | Save magnet link to server (for torrents-csv) |
 
 ## 🛠 Tech Stack
 

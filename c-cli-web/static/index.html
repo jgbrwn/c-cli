@@ -516,18 +516,14 @@
       document.body.removeChild(link);
     }
     
-    function downloadMagnetToClient(infohash, title) {
-      // Create a .magnet file content and download it
-      const magnet = `magnet:?xt=urn:btih:${infohash}&dn=${encodeURIComponent(title)}&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80/announce&tr=udp://tracker.opentrackr.org:1337/announce`;
-      const blob = new Blob([magnet], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
+    function downloadTorrentToClient(infohash, title) {
+      // Download .torrent file from server (which fetches from cache services)
       const link = document.createElement('a');
-      link.href = url;
-      link.download = `${title.replace(/[^a-zA-Z0-9]/g, '_')}.magnet`;
+      link.href = `/api/download-torrent?infohash=${encodeURIComponent(infohash)}&title=${encodeURIComponent(title)}`;
+      link.download = '';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
     }
     
     function escapeHtml(text) {
@@ -616,7 +612,7 @@
               <div class="torrent-actions">
                 <button class="btn-magnet" onclick="showMagnetDirect('${infohash}', '${escapeJs(title)}', 0)">Magnet</button>
                 <button class="btn-server" onclick="downloadToServerDirect('${infohash}', '${escapeJs(title)}', 0)">⬇ Server</button>
-                <button class="btn-client" onclick="downloadMagnetToClient('${infohash}', '${escapeJs(title)}')">💾 Save</button>
+                <button class="btn-client" onclick="downloadTorrentToClient('${infohash}', '${escapeJs(title)}')">💾 Save</button>
               </div>
             </div>
           </div>

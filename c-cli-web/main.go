@@ -50,6 +50,7 @@ func main() {
 	http.HandleFunc("/api/download", handleDownloadToServer)
 	http.HandleFunc("/api/download-file", handleDownloadToClient)
 	http.HandleFunc("/api/save-magnet", handleSaveMagnet)
+	http.HandleFunc("/api/download-torrent", handleDownloadTorrentToClient)
 
 	omdbAPIKey = os.Getenv("OMDB_API_KEY")
 
@@ -823,6 +824,50 @@ func jsonError(w http.ResponseWriter, message string, status int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
+// Torrent cache services that provide .torrent files from infohash
+var torrentCacheURLs = []string{
+	"https://itorrents.org/torrent/%s.torrent",
+	"http://btcache.me/torrent/%s",
+}
+
+// fetchTorrentFromCache tries to download a .torrent file from cache services
+func fetchTorrentFromCache(infohash string) ([]byte, error) {
+	upperHash := strings.ToUpper(infohash)
+	
+	for _, urlTemplate := range torrentCacheURLs {
+		torrentURL := fmt.Sprintf(urlTemplate, upperHash)
+		
+		req, err := http.NewRequest("GET", torrentURL, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+		
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != 200 {
+			continue
+		}
+		
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			continue
+		}
+		
+		// Verify it's actually a torrent file (starts with "d" for bencoded dict)
+		if len(data) > 0 && data[0] == 'd' {
+			return data, nil
+		}
+	}
+	
+	return nil, fmt.Errorf("could not fetch .torrent from any cache service")
+}
+
 func handleSaveMagnet(w http.ResponseWriter, r *http.Request) {
 	infohash := r.URL.Query().Get("infohash")
 	title := r.URL.Query().Get("title")
@@ -836,12 +881,30 @@ func handleSaveMagnet(w http.ResponseWriter, r *http.Request) {
 		title = infohash
 	}
 
+	safeTitle := sanitizeFilename(title)
+	
+	// Try to fetch actual .torrent file from cache services
+	torrentData, err := fetchTorrentFromCache(infohash)
+	if err == nil && len(torrentData) > 0 {
+		// Successfully got .torrent file
+		filename := fmt.Sprintf("%s.torrent", safeTitle)
+		filepath := filepath.Join(downloadDir, filename)
+		
+		if err := os.WriteFile(filepath, torrentData, 0644); err != nil {
+			jsonError(w, fmt.Sprintf("failed to save: %v", err), http.StatusInternalServerError)
+			return
+		}
+		
+		jsonResponse(w, map[string]string{"filepath": filepath, "filename": filename, "type": "torrent"})
+		return
+	}
+	
+	// Fallback to saving magnet link
 	magnet := fmt.Sprintf("magnet:?xt=urn:btih:%s&dn=%s", infohash, url.QueryEscape(title))
 	for _, t := range trackers {
 		magnet += "&tr=" + url.QueryEscape(t)
 	}
 
-	safeTitle := sanitizeFilename(title)
 	filename := fmt.Sprintf("%s.magnet", safeTitle)
 	filepath := filepath.Join(downloadDir, filename)
 
@@ -850,5 +913,45 @@ func handleSaveMagnet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonResponse(w, map[string]string{"filepath": filepath, "filename": filename})
+	jsonResponse(w, map[string]string{"filepath": filepath, "filename": filename, "type": "magnet"})
+}
+
+// handleDownloadTorrentToClient sends torrent file to browser for download
+func handleDownloadTorrentToClient(w http.ResponseWriter, r *http.Request) {
+	infohash := r.URL.Query().Get("infohash")
+	title := r.URL.Query().Get("title")
+
+	if infohash == "" {
+		jsonError(w, "missing infohash", http.StatusBadRequest)
+		return
+	}
+
+	if title == "" {
+		title = infohash
+	}
+
+	safeTitle := sanitizeFilename(title)
+	
+	// Try to fetch actual .torrent file from cache services
+	torrentData, err := fetchTorrentFromCache(infohash)
+	if err == nil && len(torrentData) > 0 {
+		// Successfully got .torrent file - send to browser
+		filename := fmt.Sprintf("%s.torrent", safeTitle)
+		w.Header().Set("Content-Type", "application/x-bittorrent")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(torrentData)))
+		w.Write(torrentData)
+		return
+	}
+	
+	// Fallback to magnet file
+	magnet := fmt.Sprintf("magnet:?xt=urn:btih:%s&dn=%s", infohash, url.QueryEscape(title))
+	for _, t := range trackers {
+		magnet += "&tr=" + url.QueryEscape(t)
+	}
+	
+	filename := fmt.Sprintf("%s.magnet", safeTitle)
+	w.Header().Set("Content-Type", "application/x-magnet")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.Write([]byte(magnet))
 }

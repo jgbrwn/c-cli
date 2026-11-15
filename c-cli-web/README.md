@@ -27,7 +27,7 @@ A web interface for browsing and downloading movies and TV shows, with IMDB meta
 
 ```bash
 # Build
-go build -o c-cli-web .
+go build -trimpath -o c-cli-web .
 
 # Run with OMDB API key (recommended)
 OMDB_API_KEY=your_key ./c-cli-web

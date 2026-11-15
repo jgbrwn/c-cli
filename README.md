@@ -27,7 +27,7 @@ Terminal-based interface built with [Bubble Tea](https://github.com/charmbracele
 ### Build & Run
 
 ```bash
-go build -o c-cli .
+go build -trimpath -o c-cli .
 
 # With OMDB API key (recommended - enables ratings, cast, plot, sorted by popularity)
 OMDB_API_KEY=your_key ./c-cli
@@ -94,7 +94,7 @@ Web-based interface with OMDB/IMDB integration for rich movie and TV show metada
 
 ```bash
 cd c-cli-web
-go build -o c-cli-web .
+go build -trimpath -o c-cli-web .
 
 # With OMDB API key (recommended - enables posters, ratings, cast, plot)
 OMDB_API_KEY=your_key ./c-cli-web

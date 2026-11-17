@@ -57,6 +57,7 @@ type OMDBMovie struct {
 	Writer       string `json:"Writer"`
 	Actors       string `json:"Actors"`
 	Plot         string `json:"Plot"`
+	Poster       string `json:"Poster"`
 	IMDBRating   string `json:"imdbRating"`
 	IMDBVotes    string `json:"imdbVotes"`
 	IMDBID       string `json:"imdbID"`
@@ -146,7 +147,7 @@ func searchYTS(query string, page, perPage int) (SearchResult, error) {
 	}
 
 	// Enrich with OMDB data and sort by popularity if API key is configured
-	if config.OMDBAPIKey != "" && len(movies) > 0 {
+	if metadataOn() && len(movies) > 0 {
 		movies = enrichAndSortMovies(movies)
 	}
 
@@ -224,7 +225,7 @@ func searchTorrentsCSV(query string, page, perPage int) (SearchResult, error) {
 	pageMovies := allMovies[start:end]
 
 	// Enrich only current page with OMDB
-	if config.OMDBAPIKey != "" && len(pageMovies) > 0 {
+	if metadataOn() && len(pageMovies) > 0 {
 		pageMovies = enrichTorrentsCSVMovies(pageMovies)
 	}
 
@@ -257,7 +258,7 @@ func GetMovieDetails(movieID int) (*Movie, error) {
 	movie := &result.Data.Movie
 
 	// Fetch OMDB data if API key is configured
-	if config.OMDBAPIKey != "" && movie.IMDBCode != "" {
+	if metadataOn() && movie.IMDBCode != "" {
 		if omdb, err := fetchOMDBInfo(movie.IMDBCode); err == nil {
 			movie.OMDB = omdb
 		}
@@ -267,8 +268,11 @@ func GetMovieDetails(movieID int) (*Movie, error) {
 }
 
 func fetchOMDBInfo(imdbID string) (*OMDBMovie, error) {
-	if config.OMDBAPIKey == "" || imdbID == "" {
+	if !metadataOn() || imdbID == "" {
 		return nil, nil
+	}
+	if tmdbEnabled() {
+		return tmdbByIMDb(imdbID)
 	}
 
 	omdbURL := fmt.Sprintf("http://www.omdbapi.com/?i=%s&apikey=%s", imdbID, config.OMDBAPIKey)
@@ -448,7 +452,7 @@ func enrichTorrentsCSVMovies(movies []Movie) []Movie {
 }
 
 func searchOMDB(title string, year int) (*OMDBMovie, error) {
-	if config.OMDBAPIKey == "" {
+	if !metadataOn() {
 		return nil, nil
 	}
 
@@ -467,7 +471,7 @@ func searchOMDB(title string, year int) (*OMDBMovie, error) {
 }
 
 func searchOMDBWithType(title string, year int, mediaType string) *OMDBMovie {
-	if config.OMDBAPIKey == "" {
+	if !metadataOn() {
 		return nil
 	}
 	
@@ -483,6 +487,9 @@ func searchOMDBWithType(title string, year int, mediaType string) *OMDBMovie {
 }
 
 func doOMDBSearch(title string, year int, mediaType string) *OMDBMovie {
+	if tmdbEnabled() {
+		return tmdbSearch(title, year, mediaType)
+	}
 	params := url.Values{}
 	params.Set("t", title)
 	params.Set("apikey", config.OMDBAPIKey)

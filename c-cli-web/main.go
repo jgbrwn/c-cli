@@ -30,6 +30,9 @@ var httpClient = &http.Client{Timeout: 15 * time.Second}
 var downloadDir string
 var omdbAPIKey string
 
+// metadataOn: OMDb or TMDB is configured (see tmdb.go).
+func metadataOn() bool { return omdbAPIKey != "" || tmdbEnabled() }
+
 func main() {
 	// Default download dir to home directory
 	downloadDir, _ = os.UserHomeDir()
@@ -52,7 +55,12 @@ func main() {
 	http.HandleFunc("/api/save-magnet", handleSaveMagnet)
 	http.HandleFunc("/api/download-torrent", handleDownloadTorrentToClient)
 
-	omdbAPIKey = os.Getenv("OMDB_API_KEY")
+	tmdbAPIKey := os.Getenv("TMDB_API_KEY")
+	if tmdbAPIKey == "" {
+		tmdbAPIKey = os.Getenv("TMDB_TOKEN")
+	}
+	var metaStatus string
+	omdbAPIKey, metaStatus = chooseMetadata(os.Getenv("OMDB_API_KEY"), tmdbAPIKey, os.Getenv("METADATA_SOURCE"))
 
 	host := "127.0.0.1"
 	if h := os.Getenv("HOST"); h != "" {
@@ -60,11 +68,7 @@ func main() {
 	}
 
 	addr := host + ":" + port
-	omdbStatus := "disabled"
-	if omdbAPIKey != "" {
-		omdbStatus = "enabled"
-	}
-	log.Printf("Starting server on %s (downloads to: %s, OMDB: %s)", addr, downloadDir, omdbStatus)
+	log.Printf("Starting server on %s (downloads to: %s, metadata: %s)", addr, downloadDir, metaStatus)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
@@ -177,8 +181,11 @@ type OMDBMovie struct {
 }
 
 func fetchOMDBInfo(imdbID string) (*OMDBMovie, error) {
-	if omdbAPIKey == "" || imdbID == "" {
+	if !metadataOn() || imdbID == "" {
 		return nil, nil
+	}
+	if tmdbEnabled() {
+		return tmdbByIMDb(imdbID)
 	}
 
 	url := fmt.Sprintf("http://www.omdbapi.com/?i=%s&apikey=%s", imdbID, omdbAPIKey)
@@ -415,7 +422,7 @@ func enrichTorrentsCSVResults(results []SearchResult) []SearchResult {
 }
 
 func searchOMDB(title string, year int) (*OMDBMovie, error) {
-	if omdbAPIKey == "" {
+	if !metadataOn() {
 		return nil, nil
 	}
 
@@ -434,7 +441,7 @@ func searchOMDB(title string, year int) (*OMDBMovie, error) {
 }
 
 func searchOMDBWithType(title string, year int, mediaType string) *OMDBMovie {
-	if omdbAPIKey == "" {
+	if !metadataOn() {
 		return nil
 	}
 	
@@ -450,6 +457,9 @@ func searchOMDBWithType(title string, year int, mediaType string) *OMDBMovie {
 }
 
 func doOMDBSearch(title string, year int, mediaType string) *OMDBMovie {
+	if tmdbEnabled() {
+		return tmdbSearch(title, year, mediaType)
+	}
 	params := url.Values{}
 	params.Set("t", title)
 	params.Set("apikey", omdbAPIKey)
@@ -571,7 +581,7 @@ func handleYTSSearch(w http.ResponseWriter, query string, page, perPage int) {
 	}
 
 	// If OMDB is configured, fetch vote counts and sort by popularity
-	if omdbAPIKey != "" && len(movies) > 0 {
+	if metadataOn() && len(movies) > 0 {
 		movies = enrichAndSortMovies(movies)
 	}
 
@@ -648,7 +658,7 @@ func handleTorrentsCSVSearch(w http.ResponseWriter, query string, page, perPage 
 	pageResults := allResults[start:end]
 
 	// Enrich only the current page with OMDB
-	if omdbAPIKey != "" && len(pageResults) > 0 {
+	if metadataOn() && len(pageResults) > 0 {
 		pageResults = enrichTorrentsCSVResults(pageResults)
 	}
 
@@ -690,7 +700,7 @@ func handleMovieDetails(w http.ResponseWriter, r *http.Request) {
 	movie := result.Data.Movie
 
 	// Fetch OMDB data if API key is configured
-	if omdbAPIKey != "" && movie.IMDBCode != "" {
+	if metadataOn() && movie.IMDBCode != "" {
 		if omdb, err := fetchOMDBInfo(movie.IMDBCode); err == nil && omdb != nil {
 			movie.OMDB = omdb
 		}

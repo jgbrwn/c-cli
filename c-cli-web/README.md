@@ -77,6 +77,14 @@ PORT=3000 DOWNLOAD_DIR=/data/torrents TMDB_API_KEY=abc123 ./c-cli-web
 Running it on a [watchbox](https://github.com/jgbrwn/watchbox) download box? Use the same Read Access Token as your
 watchbox Worker: one free key covers both.
 
+### Library notes (optional)
+
+If something in front of c-cli-web (a reverse proxy) adds `library_note` and `library_state` (`have` or
+`downloading`) to the JSON of `/api/search`, `/api/movie/<id>` or `/api/omdb`, the page shows the note as a badge on
+the result and a banner on its details, and asks "Download anyway?" before saving a torrent.
+[watchbox](https://github.com/jgbrwn/watchbox) uses this to mark titles already in your library or already downloading.
+Without such a proxy nothing changes.
+
 ## 📡 API Endpoints
 
 | Endpoint | Description |

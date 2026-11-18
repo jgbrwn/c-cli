@@ -109,6 +109,8 @@
     .lib-note { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-top: 4px; }
     .lib-note.have { background: #1e7a46; color: #fff; }
     .lib-note.downloading { background: #b7791f; color: #fff; }
+    .lib-note.big { background: #a33b3b; color: #fff; }
+    .box-note { flex-basis: 100%; order: 3; font-size: 13px; color: #f2b43c; }
     .lib-banner { margin: 12px 0; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
     .lib-banner.have { background: rgba(30, 122, 70, 0.25); border: 1px solid #1e7a46; }
     .lib-banner.downloading { background: rgba(183, 121, 31, 0.25); border: 1px solid #b7791f; }
@@ -304,6 +306,8 @@
     html[data-theme="light"] .lib-banner.have { background: #e6f4ec; border-color: #1f8a4c; color: #17663a; }
     html[data-theme="light"] .lib-banner.downloading { background: #fbf1dd; border-color: #a86a00; color: #7a4d00; }
     html[data-theme="light"] .lib-note.have { background: #1f8a4c; } html[data-theme="light"] .lib-note.downloading { background: #a86a00; }
+    html[data-theme="light"] .movie-info .lib-note.big { background: #c2383e; }
+    html[data-theme="light"] .box-note { color: #a86a00; }
     html[data-theme="light"] .imdb-link { color: var(--accent) !important; }
     html[data-theme="light"] .theme-toggle { background: transparent; border-color: var(--line); color: var(--muted); }
     html[data-theme="light"] .theme-toggle:hover { color: var(--text); border-color: var(--muted); background: transparent; }
@@ -387,8 +391,16 @@
     function libBanner(o) {
       return o && o.library_note ? `<div class="lib-banner ${libState(o)}">${o.library_state === 'downloading' ? '⬇' : '✓'} ${escapeHtml(o.library_note)}</div>` : '';
     }
-    function okToDownload() {
-      return !libraryNote || confirm(libraryNote + '.\n\nDownload anyway?');
+    // box_note: a proxy's note that a torrent doesn't fit where "⬇ Server" downloads go (watchbox: free space on the box).
+    let torrentNotes = [];        // per torrent on the details page
+    const searchBoxNotes = {};    // Torrents-CSV results, by info hash
+    function boxNote(note) {
+      return note ? `<div class="box-note">⚠ ${escapeHtml(note)}</div>` : '';
+    }
+    // toServer: the download goes to the server (box notes apply), not to this computer.
+    function okToDownload(idx, toServer) {
+      const notes = [libraryNote, toServer ? torrentNotes[idx || 0] : null].filter(Boolean);
+      return !notes.length || confirm(notes.map(n => n.replace(/\.$/, '')).join('.\n\n') + '.\n\nDownload anyway?');
     }
 
     async function search(page = 1) {
@@ -444,6 +456,7 @@
         } else {
           // Torrents-CSV format
           html += results.map(m => {
+            searchBoxNotes[m.id] = m.box_note || null;
             const isSeries = m.omdb?.Type === 'series';
             const isEpisode = m.omdb?.Type === 'episode';
             const isTVContent = isSeries || isEpisode;
@@ -456,6 +469,7 @@
                 <h3>${escapeHtml(m.title)} ${typeTag}</h3>
                 <span>${m.year || ''} • ${m.size} • ⬆${m.seeders || 0} ⬇${m.leechers || 0}${m.omdb?.totalSeasons ? ` • ${m.omdb.totalSeasons} seasons` : ''}</span>
                 ${libBadge(m)}
+                ${m.box_note ? '<div><span class="lib-note big">⚠ Bigger than the free space</span></div>' : ''}
               </div>
               ${m.omdb?.imdbRating && m.omdb.imdbRating !== 'N/A' ? `<div class="movie-rating">⭐ ${m.omdb.imdbRating}</div>` : ''}
             </div>
@@ -535,6 +549,7 @@
         const rated = omdb?.Rated && omdb.Rated !== 'N/A' ? omdb.Rated : null;
         
         let torrentsHtml = '';
+        torrentNotes = (movie.torrents || []).map(t => t.box_note || null);
         if (movie.torrents && movie.torrents.length > 0) {
           torrentsHtml = `
             <div class="torrents">
@@ -547,6 +562,7 @@
                     <span class="seeds">⬆ ${t.seeds} seeds</span>
                     <span class="peers">⬇ ${t.peers} peers</span>
                   </div>
+                  ${boxNote(t.box_note)}
                   <div class="torrent-actions">
                     <button class="btn-magnet" onclick="showMagnet('${t.hash}', '${escapeJs(movie.title)} ${t.quality}', ${i})">Magnet</button>
                     <button class="btn-server" onclick="downloadToServer('${escapeJs(t.url)}', '${escapeJs(movie.title)}', '${t.quality}', ${i})">⬇ Server</button>
@@ -615,7 +631,7 @@
     }
     
     async function downloadToServer(url, title, quality, idx) {
-      if (!okToDownload()) return;
+      if (!okToDownload(idx, true)) return;
       const btn = event.target;
       btn.disabled = true;
       btn.textContent = 'Saving...';
@@ -761,6 +777,7 @@
       }
       
       libraryNote = omdb?.library_note || null;
+      torrentNotes = [searchBoxNotes[infohash] || null];
 
       // Determine if it's a TV show
       const isSeries = omdb?.Type === 'series';
@@ -815,6 +832,7 @@
                 <span class="seeds">⬆ ${seeders}</span>
                 <span class="peers">⬇ ${leechers}</span>
               </div>
+              ${boxNote(torrentNotes[0])}
               <div class="torrent-actions">
                 <button class="btn-magnet" onclick="showMagnetDirect('${infohash}', '${escapeJs(title)}', 0)">Magnet</button>
                 <button class="btn-server" onclick="downloadToServerDirect('${infohash}', '${escapeJs(title)}', 0)">⬇ Server</button>
@@ -843,7 +861,7 @@
     }
     
     async function downloadToServerDirect(infohash, title, idx) {
-      if (!okToDownload()) return;
+      if (!okToDownload(idx, true)) return;
       const btn = event.target;
       btn.disabled = true;
       btn.textContent = 'Saving...';

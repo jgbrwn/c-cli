@@ -83,6 +83,8 @@ If something in front of c-cli-web (a reverse proxy) adds `library_note` and `li
 `downloading`) to the JSON of `/api/search`, `/api/movie/<id>` or `/api/omdb`, the page shows the note as a badge on
 the result and a banner on its details, and asks "Download anyway?" before saving a torrent.
 [watchbox](https://github.com/jgbrwn/watchbox) uses this to mark titles already in your library or already downloading.
+A proxy can also add `box_note` to a torrent (in `/api/movie/<id>` torrents or Torrents-CSV search results), such as
+"bigger than the free space on the server": it's shown under that torrent, and "⬇ Server" asks before downloading it.
 Without such a proxy nothing changes.
 
 ### Theme

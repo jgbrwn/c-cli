@@ -85,6 +85,13 @@ the result and a banner on its details, and asks "Download anyway?" before savin
 [watchbox](https://github.com/jgbrwn/watchbox) uses this to mark titles already in your library or already downloading.
 Without such a proxy nothing changes.
 
+### Theme
+
+Dark by default; the ☀/☾ button next to the title switches to a light theme, remembered per browser
+(`localStorage` key `c-cli-theme`, applied as `data-theme` on `<html>` before the page paints). A page that embeds
+c-cli-web can set that key, or the attribute, to keep it in step with its own theme: watchbox does this so Find
+follows its admin page's dark/light switch.
+
 ## 📡 API Endpoints
 
 | Endpoint | Description |

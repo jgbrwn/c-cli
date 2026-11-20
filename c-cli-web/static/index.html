@@ -51,6 +51,16 @@
       outline: none;
     }
     input[type="text"]:focus { border-color: #e94560; }
+    .search-field { position: relative; flex: 1; min-width: 0; display: flex; }
+    .search-field input[type="text"] { padding-right: 44px; }
+    .search-box .search-clear {
+      position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+      width: 32px; height: 32px; padding: 0; border-radius: 50%;
+      background: transparent; color: #888; font-size: 22px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .search-box .search-clear[hidden] { display: none; }
+    .search-box .search-clear:hover, .search-box .search-clear:focus-visible { background: rgba(127,127,127,.18); color: inherit; }
     button {
       padding: 12px 24px;
       font-size: 16px;
@@ -355,7 +365,10 @@
         <option value="yts">YTS (Movies)</option>
         <option value="torrents-csv">Torrents-CSV (All)</option>
       </select>
-      <input type="text" id="searchInput" placeholder="Search for movies or TV shows, or paste an IMDb/TMDB link or id (tt…, tmdb:…)" autofocus>
+      <div class="search-field">
+        <input type="text" id="searchInput" placeholder="Search for movies or TV shows, or paste an IMDb/TMDB link or id (tt…, tmdb:…)" autofocus enterkeyhint="search">
+        <button type="button" id="searchClear" class="search-clear" title="Clear" aria-label="Clear the search" hidden>×</button>
+      </div>
       <button onclick="search()" id="searchBtn">Search</button>
     </div>
     
@@ -377,11 +390,29 @@
       if (e.key === 'Enter') search();
     });
 
+    // Results go away when the search term is cleared or the source changes (they belong to the old search).
+    const searchClear = document.getElementById('searchClear');
+    let searchSeq = 0;   // a search that finishes after the results were cleared is ignored
+    function clearResults() {
+      searchSeq++;
+      libraryNote = null; currentQuery = ''; currentPage = 1;
+      content.innerHTML = '';
+    }
+    searchInput.addEventListener('input', () => {
+      searchClear.hidden = !searchInput.value;
+      if (!searchInput.value.trim()) clearResults();
+    });
+    searchClear.addEventListener('click', () => {
+      searchInput.value = ''; searchClear.hidden = true;
+      clearResults(); searchInput.focus();
+    });
+    document.getElementById('sourceSelect').addEventListener('change', clearResults);
+
     // Opened with ?q=… (and &source=yts|torrents-csv), e.g. from a link elsewhere: search right away.
     try {
       const qs = new URLSearchParams(location.search);
       if (qs.get('source') === 'yts' || qs.get('source') === 'torrents-csv') document.getElementById('sourceSelect').value = qs.get('source');
-      if (qs.get('q')) { searchInput.value = qs.get('q'); setTimeout(() => search(), 0); }
+      if (qs.get('q')) { searchInput.value = qs.get('q'); searchClear.hidden = false; setTimeout(() => search(), 0); }
     } catch (e) {}
     
     // Global state for pagination
@@ -419,11 +450,13 @@
       currentSource = document.getElementById('sourceSelect').value;
       currentPage = page;
       
+      const seq = ++searchSeq;
       content.innerHTML = '<div class="loading">Searching...</div>';
       
       try {
         const resp = await fetch(`/api/search?q=${encodeURIComponent(query)}&source=${currentSource}&page=${page}&per_page=20`);
         const data = await resp.json();
+        if (seq !== searchSeq) return;   // cleared, or another search started meanwhile
         
         if (!resp.ok) {
           content.innerHTML = `<div class="error">${data?.error || 'Search failed'}</div>`;
@@ -532,7 +565,7 @@
         
         content.innerHTML = html;
       } catch (err) {
-        content.innerHTML = `<div class="error">Error: ${err.message}</div>`;
+        if (seq === searchSeq) content.innerHTML = `<div class="error">Error: ${escapeHtml(err.message)}</div>`;
       }
     }
     

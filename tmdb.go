@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -339,4 +340,71 @@ func containsStr(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// ---------- searching by id ----------
+
+// titleID is an IMDb id or a TMDB id typed or pasted into the search box.
+type titleID struct {
+	IMDb string // "tt0049730"
+	TMDB int
+	Kind string // "movie", "tv" or "" (unknown) for TMDB ids
+}
+
+var (
+	imdbRe     = regexp.MustCompile(`(?i)^(?:https?://)?(?:[a-z]+\.)?imdb\.com/(?:[a-z-]+/)?title/(tt\d{5,10})|^(tt\d{5,10})$`)
+	tmdbLinkRe = regexp.MustCompile(`(?i)^(?:https?://)?(?:www\.)?themoviedb\.org/(movie|tv)/(\d+)`)
+	tmdbIDRe   = regexp.MustCompile(`(?i)^tmdb[:\s]\s*(?:(movie|tv)[:/])?(\d+)$`)
+)
+
+// parseTitleID recognises "tt0049730", IMDb links, "tmdb:3114", "tmdb:tv/1396" and TMDB links.
+func parseTitleID(s string) (titleID, bool) {
+	s = strings.TrimSpace(s)
+	if m := imdbRe.FindStringSubmatch(s); m != nil {
+		return titleID{IMDb: strings.ToLower(m[1] + m[2])}, true
+	}
+	m := tmdbLinkRe.FindStringSubmatch(s)
+	if m == nil {
+		m = tmdbIDRe.FindStringSubmatch(s)
+	}
+	if m != nil {
+		n, _ := strconv.Atoi(m[2])
+		return titleID{TMDB: n, Kind: strings.ToLower(m[1])}, n > 0
+	}
+	return titleID{}, false
+}
+
+// resolveTitleID returns the title an id stands for (name, year, type, IMDb id). TMDB ids need TMDB; IMDb ids
+// work with TMDB or OMDb. A TMDB id without a kind is tried as a movie, then as a show.
+func resolveTitleID(id titleID) (*OMDBMovie, error) {
+	if id.IMDb != "" {
+		if !metadataOn() {
+			return nil, fmt.Errorf("looking up %s needs a TMDB or OMDb key", id.IMDb)
+		}
+		m, err := fetchOMDBInfo(id.IMDb)
+		if err == nil && (m == nil || m.Title == "") {
+			return nil, fmt.Errorf("%s isn't on %s", id.IMDb, metadataName())
+		}
+		return m, err
+	}
+	if !tmdbEnabled() {
+		return nil, fmt.Errorf("searching by TMDB id needs a TMDB key")
+	}
+	kinds := []string{id.Kind}
+	if id.Kind == "" {
+		kinds = []string{"movie", "tv"}
+	}
+	for _, k := range kinds {
+		if m, err := tmdbDetails(k, id.TMDB); err == nil && m != nil && m.Title != "" {
+			return m, nil
+		}
+	}
+	return nil, fmt.Errorf("TMDB has no title with id %d", id.TMDB)
+}
+
+func metadataName() string {
+	if tmdbEnabled() {
+		return "TMDB"
+	}
+	return "OMDb"
 }

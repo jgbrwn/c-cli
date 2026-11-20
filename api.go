@@ -116,6 +116,30 @@ var httpClient = &http.Client{
 }
 
 func SearchMovies(query string, page, perPage int, source SearchSource) (SearchResult, error) {
+	// An IMDb id or link, or a TMDB id or link: YTS searches by IMDb id; Torrents-CSV by the title (and a movie's year).
+	if id, ok := parseTitleID(query); ok {
+		if source == SourceTorrentsCSV || id.IMDb == "" || metadataOn() {
+			m, err := resolveTitleID(id)
+			if err != nil {
+				return SearchResult{}, err
+			}
+			switch {
+			case source == SourceTorrentsCSV:
+				query = m.Title
+				if m.Type != "series" && len(m.Year) >= 4 {
+					query += " " + m.Year[:4]
+				}
+			case m.Type == "series":
+				return SearchResult{}, fmt.Errorf("%s is a show and YTS only has movies: switch to Torrents-CSV", m.Title)
+			case m.IMDBID == "":
+				return SearchResult{}, fmt.Errorf("%s has no IMDb id, which YTS needs: try Torrents-CSV", m.Title)
+			default:
+				query = m.IMDBID
+			}
+		} else {
+			query = id.IMDb
+		}
+	}
 	switch source {
 	case SourceTorrentsCSV:
 		return searchTorrentsCSV(query, page, perPage)

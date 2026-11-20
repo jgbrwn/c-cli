@@ -517,6 +517,17 @@ type PaginatedResponse struct {
 	PerPage    int         `json:"per_page"`
 	Total      int         `json:"total"`
 	TotalPages int         `json:"total_pages"`
+	Lookup     *IDLookup   `json:"lookup,omitempty"` // the search was an IMDb/TMDB id: the title it stands for
+	Note       string      `json:"note,omitempty"`
+}
+
+// IDLookup: what an IMDb or TMDB id in the search box resolved to.
+type IDLookup struct {
+	IMDbID string `json:"imdb_id,omitempty"`
+	TMDBID int    `json:"tmdb_id,omitempty"`
+	Title  string `json:"title"`
+	Year   string `json:"year,omitempty"`
+	Type   string `json:"type,omitempty"` // "movie" or "series"
 }
 
 func handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -546,17 +557,52 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	switch source {
-	case "yts":
-		handleYTSSearch(w, query, page, perPage)
-	case "torrents-csv", "tcsv":
-		handleTorrentsCSVSearch(w, query, page, perPage)
-	default:
+	if source != "yts" && source != "torrents-csv" && source != "tcsv" {
 		jsonError(w, "invalid source, use 'yts' or 'torrents-csv'", http.StatusBadRequest)
+		return
+	}
+
+	// An IMDb id or link, or a TMDB id or link: search for that title. YTS searches by IMDb id itself;
+	// Torrents-CSV only has names, so it gets the title (and a movie's year).
+	var lookup *IDLookup
+	if id, ok := parseTitleID(query); ok {
+		if source == "yts" && id.IMDb != "" && !metadataOn() {
+			lookup = &IDLookup{IMDbID: id.IMDb, Title: id.IMDb}
+		} else {
+			m, err := resolveTitleID(id)
+			if err != nil {
+				jsonError(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			lookup = &IDLookup{IMDbID: m.IMDBID, TMDBID: id.TMDB, Title: m.Title, Year: m.Year, Type: m.Type}
+		}
+		if source == "yts" {
+			if lookup.Type == "series" {
+				jsonResponse(w, PaginatedResponse{Results: []Movie{}, Page: 1, PerPage: perPage, TotalPages: 1, Lookup: lookup,
+					Note: "YTS only has movies. Switch to Torrents-CSV to search for this show."})
+				return
+			}
+			if lookup.IMDbID == "" {
+				jsonError(w, lookup.Title+" has no IMDb id, which YTS needs. Try Torrents-CSV.", http.StatusNotFound)
+				return
+			}
+			query = lookup.IMDbID
+		} else {
+			query = lookup.Title
+			if lookup.Type != "series" && len(lookup.Year) >= 4 {
+				query += " " + lookup.Year[:4]
+			}
+		}
+	}
+
+	if source == "yts" {
+		handleYTSSearch(w, query, page, perPage, lookup)
+	} else {
+		handleTorrentsCSVSearch(w, query, page, perPage, lookup)
 	}
 }
 
-func handleYTSSearch(w http.ResponseWriter, query string, page, perPage int) {
+func handleYTSSearch(w http.ResponseWriter, query string, page, perPage int, lookup *IDLookup) {
 	params := url.Values{}
 	params.Set("query_term", query)
 	params.Set("limit", strconv.Itoa(perPage))
@@ -597,10 +643,11 @@ func handleYTSSearch(w http.ResponseWriter, query string, page, perPage int) {
 		PerPage:    perPage,
 		Total:      total,
 		TotalPages: totalPages,
+		Lookup:     lookup,
 	})
 }
 
-func handleTorrentsCSVSearch(w http.ResponseWriter, query string, page, perPage int) {
+func handleTorrentsCSVSearch(w http.ResponseWriter, query string, page, perPage int, lookup *IDLookup) {
 	// Fetch a larger batch from Torrents-CSV (they use cursor pagination)
 	// We'll fetch up to 200 results and paginate on our side
 	fetchSize := 200
@@ -623,8 +670,16 @@ func handleTorrentsCSVSearch(w http.ResponseWriter, query string, page, perPage 
 
 	// Convert to SearchResult format
 	allResults := make([]SearchResult, 0, len(result.Torrents))
+	want := ""
+	if lookup != nil {
+		want = tmdbNorm(lookup.Title)
+	}
 	for _, t := range result.Torrents {
 		year, imdbCode := extractYearAndIMDB(t.Name)
+		// Searched by id: torrents named after that title carry its IMDb id (for library notes and details).
+		if imdbCode == "" && want != "" && lookup.IMDbID != "" && strings.HasPrefix(tmdbNorm(cleanTorrentName(t.Name)), want) {
+			imdbCode = lookup.IMDbID
+		}
 		allResults = append(allResults, SearchResult{
 			ID:       t.Infohash,
 			Title:    cleanTorrentName(t.Name),
@@ -668,6 +723,7 @@ func handleTorrentsCSVSearch(w http.ResponseWriter, query string, page, perPage 
 		PerPage:    perPage,
 		Total:      total,
 		TotalPages: totalPages,
+		Lookup:     lookup,
 	})
 }
 

@@ -355,7 +355,7 @@
         <option value="yts">YTS (Movies)</option>
         <option value="torrents-csv">Torrents-CSV (All)</option>
       </select>
-      <input type="text" id="searchInput" placeholder="Search for movies or TV shows..." autofocus>
+      <input type="text" id="searchInput" placeholder="Search for movies or TV shows, or paste an IMDb/TMDB link or id (tt…, tmdb:…)" autofocus>
       <button onclick="search()" id="searchBtn">Search</button>
     </div>
     
@@ -376,6 +376,13 @@
     searchInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') search();
     });
+
+    // Opened with ?q=… (and &source=yts|torrents-csv), e.g. from a link elsewhere: search right away.
+    try {
+      const qs = new URLSearchParams(location.search);
+      if (qs.get('source') === 'yts' || qs.get('source') === 'torrents-csv') document.getElementById('sourceSelect').value = qs.get('source');
+      if (qs.get('q')) { searchInput.value = qs.get('q'); setTimeout(() => search(), 0); }
+    } catch (e) {}
     
     // Global state for pagination
     let currentPage = 1;
@@ -427,12 +434,16 @@
         const results = data.results || data;
         const pagination = data.total ? data : null;
         
+        // Searched by an IMDb/TMDB id: say which title it is.
+        const lk = data.lookup;
+        const lookupHtml = lk ? `<div class="pagination-info id-lookup">Results for <b>${escapeHtml(lk.title)}</b>${lk.year ? ' (' + escapeHtml(lk.year) + ')' : ''}${lk.type === 'series' ? ' · show' : ''}${lk.imdb_id ? ' · ' + escapeHtml(lk.imdb_id) : ''}${lk.tmdb_id ? ' · TMDB ' + lk.tmdb_id : ''}</div>` : '';
+
         if (!results || results.length === 0) {
-          content.innerHTML = '<div class="error">No results found</div>';
+          content.innerHTML = lookupHtml + `<div class="error">${escapeHtml(data.note || 'No results found')}</div>`;
           return;
         }
         
-        let html = '';
+        let html = lookupHtml;
         
         // Pagination header
         if (pagination) {

@@ -87,6 +87,15 @@ A proxy can also add `box_note` to a torrent (in `/api/movie/<id>` torrents or T
 "bigger than the free space on the server": it's shown under that torrent, and "⬇ Server" asks before downloading it.
 Without such a proxy nothing changes.
 
+### Search by id
+
+The search box also takes an IMDb id or link (`tt0049730`, `https://www.imdb.com/title/tt0049730/`) or a TMDB id or
+link (`tmdb:3114`, `tmdb:tv/1396`, `https://www.themoviedb.org/movie/3114-the-searchers`). The title it stands for is
+looked up first (TMDB, or OMDb for IMDb ids): YTS is then searched by its IMDb id, Torrents-CSV by its name (plus a
+movie's year), and Torrents-CSV results named after it carry its IMDb id. The response has
+`"lookup": { "imdb_id", "tmdb_id", "title", "year", "type" }`, and a `"note"` when nothing can be found (a show on
+YTS). The page also opens with a search filled in: `/?q=tt0049730&source=yts`.
+
 ### Theme
 
 Dark by default; the ☀/☾ button next to the title switches to a light theme, remembered per browser
@@ -99,7 +108,7 @@ follows its admin page's dark/light switch.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Web UI |
-| `GET /api/search?q=<query>&source=<yts\|torrents-csv>&page=<n>&per_page=<n>` | Search with pagination (default: page=1, per_page=20) |
+| `GET /api/search?q=<query>&source=<yts\|torrents-csv>&page=<n>&per_page=<n>` | Search with pagination (default: page=1, per_page=20); `q` can be an IMDb/TMDB id or link |
 | `GET /api/movie/<id>` | Get movie details (with TMDB/OMDb data if configured) |
 | `GET /api/omdb?i=<imdb_id>` or `?t=<title>&y=<year>` | Look up metadata directly (OMDb-shaped JSON, from TMDB or OMDb) |
 | `GET /api/magnet?hash=<hash>&name=<name>` | Generate magnet link |

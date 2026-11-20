@@ -11,6 +11,7 @@ Inspired by [cinecli](https://github.com/eyeblech/cinecli) by [@eyeblech](https:
   - **Torrents-CSV** - General torrents (movies, TV shows, and more)
 - 🎬📺 View detailed movie & TV show information (posters, ratings, cast and plot via TMDB or OMDb)
 - 📺 **TV Show Support** - Automatic detection of TV series with season counts, episode runtimes, creators
+- 🆔 **Search by id** - paste an IMDb id or link (`tt0049730`) or a TMDB id or link (`tmdb:3114`, `tmdb:tv/1396`, `https://www.themoviedb.org/movie/3114-…`). YTS is searched by the IMDb id; Torrents-CSV by the title (and a movie's year). TMDB ids need a TMDB key; IMDb ids work on YTS even with no key
 - 📊 Search results sorted by popularity
 - 📄 **Pagination** - Navigate through large result sets
 - 🧲 Generate magnet links

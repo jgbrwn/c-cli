@@ -436,7 +436,7 @@
         
         // Searched by an IMDb/TMDB id: say which title it is.
         const lk = data.lookup;
-        const lookupHtml = lk ? `<div class="pagination-info id-lookup">Results for <b>${escapeHtml(lk.title)}</b>${lk.year ? ' (' + escapeHtml(lk.year) + ')' : ''}${lk.type === 'series' ? ' · show' : ''}${lk.imdb_id ? ' · ' + escapeHtml(lk.imdb_id) : ''}${lk.tmdb_id ? ' · TMDB ' + lk.tmdb_id : ''}</div>` : '';
+        const lookupHtml = lk ? `<div class="pagination-info id-lookup">Results for <b>${escapeHtml(lk.title)}</b>${lk.year ? ' (' + escapeHtml(lk.year) + ')' : ''}${lk.type === 'series' ? ' · show' : ''}${lk.imdb_id ? ' · ' + escapeHtml(lk.imdb_id) : ''}${lk.tmdb_id ? ' · TMDB ' + lk.tmdb_id : ''}${libBadge(lk)}</div>` : '';
 
         if (!results || results.length === 0) {
           content.innerHTML = lookupHtml + `<div class="error">${escapeHtml(data.note || 'No results found')}</div>`;

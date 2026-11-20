@@ -390,7 +390,7 @@
       if (e.key === 'Enter') search();
     });
 
-    // Results go away when the search term is cleared or the source changes (they belong to the old search).
+    // Results go away when the search term is cleared; switching the source clears the term too.
     const searchClear = document.getElementById('searchClear');
     let searchSeq = 0;   // a search that finishes after the results were cleared is ignored
     function clearResults() {
@@ -406,7 +406,10 @@
       searchInput.value = ''; searchClear.hidden = true;
       clearResults(); searchInput.focus();
     });
-    document.getElementById('sourceSelect').addEventListener('change', clearResults);
+    document.getElementById('sourceSelect').addEventListener('change', () => {   // a new source starts a new search
+      searchInput.value = ''; searchClear.hidden = true;
+      clearResults(); searchInput.focus();
+    });
 
     // Opened with ?q=… (and &source=yts|torrents-csv), e.g. from a link elsewhere: search right away.
     try {
